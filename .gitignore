@@ -1,0 +1,5 @@
+.ssh
+secret/
+flash/secret/
+*.img
+*.img.xz
