@@ -3,3 +3,4 @@ secret/
 flash/secret/
 *.img
 *.img.xz
+flash/settings.env

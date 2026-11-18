@@ -1,9 +1,8 @@
 #!/bin/bash
 # Stage 2 (reversible): provision the loop-mounted image in RAM. Secrets are read on the Pi (Wi-Fi) or fetched as a hash; nothing secret is printed.
 set -uo pipefail
-SRV=http://192.168.1.10:8765
-HOST=k3s-pi
-CCDEF=GB TZONE=Europe/London
+[ -f ./settings.env ] && . ./settings.env
+: "${SRV:?set SRV in settings.env}" "${HOST:?}" "${CCDEF:?}" "${TZONE:?}"
 W=/dev/shm/flash; cd $W || exit 1
 B=$W/b R=$W/r
 mountpoint -q $B && mountpoint -q $R || { echo "image not mounted"; exit 1; }

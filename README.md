@@ -7,6 +7,7 @@ An experiment: a Raspberry Pi 4 running k3s, populated by cheap AI agents (Claud
 - `reports/`: progress reports (coming)
 
 ## Flashing recap
+0. Copy `settings.env.example` to `settings.env` and fill it in. On the Pi, download it next to the scripts and run them from that folder.
 1. `stage1.sh`: stop k3s, download and verify Pi OS Lite into RAM, loop-mount it.
 2. `stage2.sh`: provision the image in RAM (cloud-init user, Wi-Fi keyfile copied from the old system, SSH, hostname), then write `commit.sh`.
 3. `commit.sh`: remount the disk read-only, `dd` the image onto the boot SSD, and reboot. The Pi rebuilds itself.

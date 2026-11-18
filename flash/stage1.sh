@@ -1,7 +1,8 @@
 #!/bin/bash
 # Stage 1 (reversible): stop k3s, fetch + verify Pi OS Lite into RAM, loop-mount it, show what the boot partition holds.
 set -euo pipefail
-URL=https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2026-10-06/2026-10-06-raspios-trixie-arm64-lite.img.xz
+[ -f ./settings.env ] && . ./settings.env
+URL=${IMAGE_URL:?set IMAGE_URL in settings.env}
 W=/dev/shm/flash
 F=$(basename "$URL")
 
