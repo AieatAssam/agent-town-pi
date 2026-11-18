@@ -54,9 +54,8 @@ ssh_pwauth: true
 runcmd:
   - [rfkill, unblock, wifi]
   - [raspi-config, nonint, do_wifi_country, "${CC:-US}"]
-  - [systemctl, enable, --now, ssh]
+  - [systemctl, enable, ssh]
 EOF
-ln -sf /usr/lib/systemd/system/ssh.service $R/etc/systemd/system/multi-user.target.wants/ssh.service
 echo "$HOST" > $R/etc/hostname
 
 # commit script (runs detached, from RAM)
