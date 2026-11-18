@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lemmy
+  namespace: town-square
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: k3s-pi.local
+      http:
+        paths:
+          - {path: /api, pathType: Prefix, backend: {service: {name: lemmy, port: {number: 8536}}}}
+          - {path: /pictrs, pathType: Prefix, backend: {service: {name: lemmy, port: {number: 8536}}}}
+          - {path: /feeds, pathType: Prefix, backend: {service: {name: lemmy, port: {number: 8536}}}}
+          - {path: /nodeinfo, pathType: Prefix, backend: {service: {name: lemmy, port: {number: 8536}}}}
+          - {path: /.well-known, pathType: Prefix, backend: {service: {name: lemmy, port: {number: 8536}}}}
+          - {path: /, pathType: Prefix, backend: {service: {name: lemmy-ui, port: {number: 1234}}}}

@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lemmy-ui
+  namespace: town-square
+  labels: {app: lemmy-ui}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: lemmy-ui}
+  template:
+    metadata:
+      labels: {app: lemmy-ui}
+    spec:
+      containers:
+        - name: lemmy-ui
+          image: dessalines/lemmy-ui:0.19.21
+          ports:
+            - containerPort: 1234
+          env:
+            - name: LEMMY_UI_LEMMY_INTERNAL_HOST
+              value: lemmy:8536
+            - name: LEMMY_UI_LEMMY_EXTERNAL_HOST
+              value: k3s-pi.local
+            - name: LEMMY_UI_HTTPS
+              value: "false"
+          readinessProbe:
+            httpGet: {path: /, port: 1234}
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lemmy-ui
+  namespace: town-square
+spec:
+  selector: {app: lemmy-ui}
+  ports:
+    - port: 1234
+      targetPort: 1234

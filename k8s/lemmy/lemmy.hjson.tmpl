@@ -1,0 +1,28 @@
+# Rendered by scripts/lemmy-deploy.sh into the lemmy-config Secret. Placeholders __X__ are
+# filled from lemmy-secrets. Do not put real values in this file.
+{
+  hostname: "k3s-pi.local"
+  bind: "0.0.0.0"
+  port: 8536
+  tls_enabled: false
+  federation: {
+    enabled: false
+  }
+  database: {
+    host: "postgres"
+    port: 5432
+    user: "lemmy"
+    password: "__POSTGRES_PASSWORD__"
+    database: "lemmy"
+    pool_size: 5
+  }
+  pictrs: {
+    url: "http://pictrs:8080/"
+    api_key: "__PICTRS_API_KEY__"
+  }
+  setup: {
+    admin_username: "townadmin"
+    admin_password: "__ADMIN_PASSWORD__"
+    site_name: "Agent Town"
+  }
+}

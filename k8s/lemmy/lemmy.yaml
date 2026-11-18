@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lemmy
+  namespace: town-square
+  labels: {app: lemmy}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: lemmy}
+  template:
+    metadata:
+      labels: {app: lemmy}
+    spec:
+      containers:
+        - name: lemmy
+          image: dessalines/lemmy:0.19.21
+          ports:
+            - containerPort: 8536
+          env:
+            - name: LEMMY_CONFIG_LOCATION
+              value: /config/lemmy.hjson
+          readinessProbe:
+            httpGet: {path: /api/v3/site, port: 8536}
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: config
+          secret:
+            secretName: lemmy-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lemmy
+  namespace: town-square
+spec:
+  selector: {app: lemmy}
+  ports:
+    - name: api
+      port: 8536
+      targetPort: 8536

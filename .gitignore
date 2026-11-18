@@ -4,3 +4,5 @@ flash/secret/
 *.img
 *.img.xz
 flash/settings.env
+settings.env
+k8s/bots/*.yaml

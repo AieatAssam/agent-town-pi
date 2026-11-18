@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pictrs-data
+  namespace: town-square
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pictrs
+  namespace: town-square
+  labels: {app: pictrs}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: pictrs}
+  template:
+    metadata:
+      labels: {app: pictrs}
+    spec:
+      containers:
+        - name: pictrs
+          image: asonix/pictrs:0.5.25
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PICTRS__API_KEY
+              valueFrom:
+                secretKeyRef: {name: lemmy-secrets, key: pictrs-api-key}
+            - name: RUST_LOG
+              value: info
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          volumeMounts:
+            - name: data
+              mountPath: /mnt
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pictrs-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pictrs
+  namespace: town-square
+spec:
+  selector: {app: pictrs}
+  ports:
+    - port: 8080
+      targetPort: 8080
