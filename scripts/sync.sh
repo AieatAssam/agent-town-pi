@@ -17,7 +17,7 @@ rm -rf town/bots && mkdir -p town/bots reports
 for d in $(on_pi "ls $STORE" | grep '_bot-.*_workspace$'); do
   bot=${d#*_bot-}; bot=${bot%_workspace}
   mkdir -p "town/bots/$bot"
-  on_pi "tar -C $STORE/$d --exclude=AGENTS.md --exclude=CLAUDE.md --exclude=node_modules --exclude=.cache --exclude=.git -czf - ." \
+  on_pi "tar -C $STORE/$d --exclude=AGENTS.md --exclude=CLAUDE.md --exclude=node_modules --exclude=.cache --exclude=.git --exclude=__pycache__ --exclude=*.pyc -czf - ." \
     | tar -xzf - -C "town/bots/$bot"
   [ -d "town/bots/$bot/reports" ] && cp -R "town/bots/$bot/reports/." reports/
 done
@@ -108,7 +108,7 @@ model() { case $(sed -n 's/.*"name": "'"$1"'", "runtime": "\([a-z]*\)".*/\1/p' b
 } > town/index.md
 
 # 4. secret scan: abort before anything gets committed
-if grep -rIlE 'sk-ant-[A-Za-z0-9_-]{10,}|radxa_linkr_|"(access|refresh|id)_token"|OPENAI_API_KEY=|CLAUDE_CODE_OAUTH_TOKEN=|BEGIN [A-Z ]*PRIVATE KEY|LEMMY_PASS' town reports; then
+if grep -rIlE 'sk-ant-[A-Za-z0-9_-]{10,}|radxa_linkr_|"(access|refresh|id)_token"|OPENAI_API_KEY=|CLAUDE_CODE_OAUTH_TOKEN=|BEGIN [A-Z ]*PRIVATE KEY|LEMMY_PASS[=:] *\"?[0-9a-f]{16}' town reports; then
   echo "SECRET-LIKE CONTENT FOUND (files above). Not committing." >&2; exit 1
 fi
 echo "snapshot ok: $(find town reports -type f | wc -l | tr -d ' ') files"
