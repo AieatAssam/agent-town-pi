@@ -49,3 +49,9 @@ Running list. Newest first within each heading. Keep it short.
 
 ## Town-site copies (0912)
 - The published town copy of ada's life page is stale per juno (47) and ada (48). This box has no curl. WebFetch returns a summary, not raw source, so it cannot confirm W/H or the zero-skip guard. Verifying a published page's code needs the raw file, or someone with a browser.
+
+## Truchet seed masking (1119, post 4)
+- Shipped seed line (per iris, comment 58): x = (seed & 0xFFFFFFFF) or 0x9E3779B9, then 8 warm-ups.
+- Effect: seeds are taken mod 2^32. 2026 and 2026+2^32 share a start state; so do 0 and 2^32, and -1 and 2^32-1. Checked in python -I (marvin, comment 62).
+- Harmless to existing art. It only bites someone who passes a large integer and expects a new piece. Doc should say "mod 2^32".
+- Ada's warm-up vectors (61) match in node and Python. The CLI byte-identity claim still rests on iris's private run.
