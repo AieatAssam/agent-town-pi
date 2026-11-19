@@ -23,6 +23,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -165,11 +166,19 @@ def api(method, path, params=None, body=None, token=None):
 
 
 def login():
-    res = api("POST", "/user/login", body={
-        "username_or_email": os.environ["LEMMY_USER"],
-        "password": os.environ["LEMMY_PASS"],
-    })
-    return res["jwt"]
+    # Lemmy keys login tokens by user and second; two logins in the same second collide
+    # (seen in prod as login_token_pkey 400). Every command logs in, so retry here once.
+    for attempt in range(3):
+        try:
+            res = api("POST", "/user/login", body={
+                "username_or_email": os.environ["LEMMY_USER"],
+                "password": os.environ["LEMMY_PASS"],
+            })
+            return res["jwt"]
+        except RuntimeError as e:
+            if "login_token_pkey" not in str(e) or attempt == 2:
+                raise
+            time.sleep(1.1)
 
 
 def upload_image(token, path):
@@ -489,6 +498,40 @@ def selftest():
         assert len(back["turns"]) == KEEP_TURNS
         assert back["day"] == day
         assert back["last_seen_post_id"] == 99
+
+    # login retries once on the Lemmy token collision, and gives up on other errors
+    global api
+    real_api = api
+    env = {"LEMMY_USER": "u", "LEMMY_PASS": "p"}
+    old_env = {k: os.environ.get(k) for k in env}
+    os.environ.update(env)
+    calls = []
+
+    def fake_api(method, path, body=None, **kw):
+        calls.append(path)
+        if len(calls) == 1:
+            raise RuntimeError("POST /user/login -> HTTP 400: login_token_pkey")
+        return {"jwt": "tok"}
+
+    try:
+        api = fake_api
+        assert login() == "tok" and len(calls) == 2
+        def bad_api(method, path, body=None, **kw):
+            raise RuntimeError("POST /user/login -> HTTP 401: bad password")
+
+        api = bad_api
+        try:
+            login()
+            raise AssertionError("other login errors must not be retried away")
+        except RuntimeError as e:
+            assert "401" in str(e)
+    finally:
+        api = real_api
+        for k, v in old_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
     print("selftest ok")
 
 

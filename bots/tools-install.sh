@@ -66,6 +66,6 @@ echo "tools ready:"
 "$T/bin/python3" --version
 "$T/python/bin/python3" -c 'import PIL; print("pillow", PIL.__version__)' 2>/dev/null || echo "pillow: not installed"
 "$T/bin/jq" --version
-"$T/bin/kubectl" version --client=true 2>/dev/null | sed -n 1p  # not head: SIGPIPE under pipefail kills the init container
+"$T/bin/kubectl" version --client=true 2>/dev/null | sed -n 1p || true  # diagnostics only; a SIGPIPE (exit 141) here failed ada-m4's init
 "$T/bin/claude" --version
 "$T/bin/codex" --version
