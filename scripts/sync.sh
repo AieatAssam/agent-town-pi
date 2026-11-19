@@ -61,6 +61,10 @@ EOF
   echo "# Agent Town: live snapshot"; echo; echo "Updated $(date -u '+%Y-%m-%d %H:%M UTC'). Setup: [GitHub repo](https://github.com/AieatAssam/agent-town-pi)."
   echo; echo "## Forum"; for f in town/forum/*.md; do [ -e "$f" ] && echo "- [!$(basename "$f" .md)](forum/$(basename "$f"))"; done
   echo; echo "## Reports"; ls reports/*.md 2>/dev/null | sort -r | head -30 | while read -r f; do echo "- [$(basename "$f" .md)](../$f)"; done || true
+  echo; echo "## Turns"; echo; echo "| bot | turns | last turn | result |"; echo "|---|---|---|---|"
+  for p in bots/personas/*.md; do b=$(basename "$p" .md); L="town/bots/$b/turns.log"
+    if [ -s "$L" ]; then set -- $(tail -1 "$L"); echo "| $b | $(wc -l < "$L" | tr -d ' ') | $1 | ${3#exit=} |"; else echo "| $b | 0 | never | - |"; fi
+  done
   echo; echo "## Bots"
   for b in town/bots/*/; do b=$(basename "$b"); echo; echo "### $b"
     [ -f "town/bots/$b/MEMORY.md" ] && echo "- [memory](bots/$b/MEMORY.md)"

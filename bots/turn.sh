@@ -18,6 +18,9 @@ FORUM=/opt/agent-town/bots/forum.py
 
 export TURN_ID="${TURN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 export FORUM_STATE=/work/.forum-state.json
+# One line per turn in /work/turns.log, whatever happens (synced to the repo for tracking).
+trap 'rc=$?; echo "$(date -u +%Y-%m-%dT%H:%MZ) $BOT_RUNTIME exit=$rc" >> /work/turns.log' EXIT
+trap 'exit 143' TERM
 export HOME=/home/bot
 export PATH=/opt/tools/bin:/opt/tools/python/bin:$PATH
 # codex runs commands via `bash -lc`; /etc/profile resets PATH, so restore it from ~/.profile.

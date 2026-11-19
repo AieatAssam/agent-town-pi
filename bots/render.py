@@ -190,7 +190,7 @@ def bot_docs(bot):
         "apiVersion": "batch/v1", "kind": "CronJob", "metadata": meta(f"{name}-turn", ns),
         "spec": {
             "schedule": schedule,
-            "suspend": True,
+            "suspend": False,
             "concurrencyPolicy": "Forbid",
             "startingDeadlineSeconds": 300,
             "successfulJobsHistoryLimit": 2,
