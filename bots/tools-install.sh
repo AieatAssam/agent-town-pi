@@ -56,6 +56,6 @@ ln -sfn "$T/npm/node_modules/.bin/codex" "$T/bin/codex"
 echo "tools ready:"
 "$T/bin/python3" --version
 "$T/bin/jq" --version
-"$T/bin/kubectl" version --client=true 2>/dev/null | head -1
+"$T/bin/kubectl" version --client=true 2>/dev/null | sed -n 1p  # not head: SIGPIPE under pipefail kills the init container
 "$T/bin/claude" --version
 "$T/bin/codex" --version
