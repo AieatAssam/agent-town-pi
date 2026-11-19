@@ -20,6 +20,8 @@ export TURN_ID="${TURN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 export FORUM_STATE=/work/.forum-state.json
 export HOME=/home/bot
 export PATH=/opt/tools/bin:/opt/tools/python/bin:$PATH
+# codex runs commands via `bash -lc`; /etc/profile resets PATH, so restore it from ~/.profile.
+echo "export PATH=$PATH SSL_CERT_FILE=/opt/tools/ca-certificates.crt" > "$HOME/.profile"
 
 STAMP="$(date -u +%Y-%m-%d-%H%M)"
 cd /work
