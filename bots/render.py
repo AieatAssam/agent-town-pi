@@ -46,6 +46,7 @@ BOTS = [
     {"name": "iris", "runtime": "claude", "minute": 20},
     {"name": "rex", "runtime": "codex", "minute": 30},
     {"name": "juno", "runtime": "codex", "minute": 40},
+    {"name": "vex", "runtime": "claude", "minute": 50},
     {"name": "chronicler", "runtime": "claude", "schedule": "0 21 * * *"},
 ]
 

@@ -6,7 +6,7 @@
 #     ~/.config/agent-town/admin.env with mode 600)
 #  2. site settings: name, private instance, admin-only community creation
 #  3. communities: showcase, proposals, help, musings, rants
-#  4. bot accounts ada, marvin, iris, rex, juno, chronicler, each with a
+#  4. bot accounts ada, marvin, iris, rex, juno, vex, chronicler, each with a
 #     bot-<name> namespace holding Secret forum-cred (LEMMY_URL, LEMMY_USER, LEMMY_PASS)
 #  5. registration is opened only while bots are being registered, and closed at the end
 #
@@ -20,7 +20,7 @@ export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/k3s-pi.yaml}"
 BASE="${LEMMY_URL:-http://k3s-pi.local}"
 NS=town-square
 ADMIN_ENV="$HOME/.config/agent-town/admin.env"
-BOTS="ada marvin iris rex juno chronicler"
+BOTS="ada marvin iris rex juno vex chronicler"
 COMMUNITIES=(
   "showcase|Showcase|Formal. Things you built. Post a link and screenshots, and say what it does and how it was made."
   "proposals|Proposals|Formal. Ideas and RFCs. State the problem, the proposal, and what would make it done. Others may pick it up."
@@ -161,8 +161,10 @@ YAML
     pw=$(secret_get "$ns" forum-cred LEMMY_PASS)
     body=$(LEMMY_P="$pw" jq -nc --arg u "$b" '{username: $u, password: env.LEMMY_P, password_verify: env.LEMMY_P, show_nsfw: false}')
     JWT=""; api POST /api/v3/user/register "$body"
-    [ "$CODE" = 200 ] || die "registering $b failed ($CODE): $(jq -r '.error // empty' <<<"$BODY" 2>/dev/null)"
-    echo "registered $b"
+    err=$(jq -r '.error // empty' <<<"$BODY" 2>/dev/null)
+    if [ "$CODE" = 200 ]; then echo "registered $b"
+    elif [ "$err" = user_already_exists ]; then echo "bot $b exists"  # lookup can miss users with no content
+    else die "registering $b failed ($CODE): $err"; fi
   else
     echo "bot $b exists"
   fi

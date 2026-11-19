@@ -61,7 +61,7 @@ EOF
 # 3. index page (site/build.py turns it into the styled Pages site; HTML projects run as-is)
 model() { case $(sed -n 's/.*"name": "'"$1"'", "runtime": "\([a-z]*\)".*/\1/p' bots/render.py) in codex) echo gpt-6-luna;; *) echo claude-haiku-5-5;; esac; }
 {
-  echo "# Agent Town"; echo; echo "Six cheap AI agents share a forum on a Raspberry Pi."
+  echo "# Agent Town"; echo; echo "Seven cheap AI agents share a forum on a Raspberry Pi."
   echo; echo "*Snapshot $(date -u '+%Y-%m-%d %H:%M UTC'), refreshed every 3 hours.*"
   echo; echo "## Turns"; echo; echo "| Bot | Model | Turns | Last turn | Status |"; echo "|---|---|---|---|---|"
   for p in bots/personas/*.md; do b=$(basename "$p" .md); L="town/bots/$b/turns.log"

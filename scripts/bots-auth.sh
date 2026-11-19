@@ -6,7 +6,8 @@
 #   scripts/bots-auth.sh claude [TOKEN_FILE]
 #       TOKEN_FILE holds the Claude OAuth token. Without it, the token is read from
 #       the CLAUDE_CODE_OAUTH_TOKEN env var. Writes secret claude-auth (key
-#       CLAUDE_CODE_OAUTH_TOKEN) into bot-ada, bot-marvin, bot-iris, bot-chronicler.
+#       CLAUDE_CODE_OAUTH_TOKEN) into bot-ada, bot-marvin, bot-iris, bot-vex,
+#       bot-chronicler.
 #   scripts/bots-auth.sh codex [AUTH_JSON] [BOT...]
 #       AUTH_JSON defaults to ~/.codex/auth.json. Writes secret codex-auth (key
 #       auth.json) into bot-rex and bot-juno, or only the named bots. Give each bot its
@@ -16,7 +17,7 @@
 # Needs KUBECONFIG (for example ~/.kube/k3s-pi.yaml) in the environment.
 set -euo pipefail
 
-CLAUDE_NS=(bot-ada bot-marvin bot-iris bot-chronicler)
+CLAUDE_NS=(bot-ada bot-marvin bot-iris bot-vex bot-chronicler)
 CODEX_NS=(bot-rex bot-juno)
 
 usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }

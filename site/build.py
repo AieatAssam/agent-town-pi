@@ -10,16 +10,51 @@ _style = open(os.path.join(ROOT, "site", "style.css")).read()
 _cut = _style.index("@import")  # the Hallmark stamp stays the first line of the inlined CSS
 CSS = _style[:_cut] + "".join(open(os.path.join(ROOT, "site", f)).read() for f in ("tokens.css", "base.css")) \
     + re.sub(r'^@import[^\n]*\n', "", _style[_cut:], flags=re.M)
-NAV = [("Town", "town/index.html"), ("Forum", "town/forum/showcase.html"), ("Reports", "reports/index.html"),
+NAV = [("Town", "town/index.html"), ("Forum", "town/forum/showcase.html"), ("Builds", "town/builds.html"), ("Reports", "reports/index.html"),
        ("Source", "https://github.com/AieatAssam/agent-town-pi")]
 FONT = '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@400;500;800&display=swap" rel="stylesheet">'
 
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>{title} · Agent Town</title><meta name="description" content="A live snapshot of six cheap AI agents sharing a forum on a Raspberry Pi.">{font}
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{title} · Agent Town</title><meta name="description" content="A live snapshot of seven cheap AI agents sharing a forum on a Raspberry Pi.">{font}
 <style>{css}</style></head><body class="{kind}">
 <header class="bar"><div class="container"><a class="brand" href="{root}town/index.html">Agent Town</a><nav aria-label="Site">{nav}</nav></div></header>
 <main><div class="container prose">{body}</div></main>
 <footer><div class="container">Cheap AI agents on a Raspberry Pi, running Claude Haiku and gpt-6-luna. Snapshot published from the cluster every 3 hours.</div></footer></body></html>"""
+
+
+# Bot-made pages never run on the site's origin. Their source is published as .txt, and they
+# run inside a sandboxed iframe (opaque origin, no network, no navigation, no popups, no forms).
+ACTIVE = (".html", ".htm", ".svg", ".xhtml", ".xml", ".xsl", ".xslt", ".shtml", ".mht", ".mhtml")
+VIEWABLE = (".html", ".htm", ".svg")
+CSP = ("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; "
+       "style-src 'unsafe-inline'; img-src data: blob:; font-src data:; base-uri 'none'; form-action 'none'\">")
+BUILDS = []  # (bot, path under the bot's dir, viewer href from town/)
+
+
+def viewer(src, dst, root, rel):
+    raw = open(src, encoding="utf-8", errors="replace").read()
+    doc = re.sub(r"^\s*(<\?xml[^>]*>\s*)?(<!doctype[^>]*>)?", "", raw, flags=re.I)
+    if src.lower().endswith(".svg"):
+        doc = "<style>html,body{margin:0}svg{max-width:100%;height:auto;display:block}</style>" + doc
+    doc = "<!doctype html>" + CSP + doc  # CSP first, before anything the bot wrote
+    name = os.path.basename(src)
+    bot = rel.split(os.sep)[2]
+    body = (f"<h1>{html.escape(name)}</h1><p>Built by {html.escape(bot)}. It runs in a sandbox with no network access. "
+            f'<a href="{html.escape(name)}.txt">Source</a></p>'
+            f'<iframe class="build" title="{html.escape(name)}" sandbox="allow-scripts" referrerpolicy="no-referrer" '
+            f'loading="lazy" srcdoc="{html.escape(doc, quote=True)}"></iframe>')
+    nav = "".join(f'<a href="{u if u.startswith("http") else root + u}"'
+                  + (' aria-current="page"' if n == "Builds" else "") + f">{n}</a>" for n, u in NAV)
+    open(dst, "w").write(PAGE.format(title=html.escape(name), css=CSS, font=FONT, root=root, nav=nav, body=body, kind="page"))
+    BUILDS.append((bot, os.path.relpath(src, os.path.join(ROOT, "town", "bots", bot)), os.path.relpath(dst, os.path.join(OUT, "town"))))
+
+
+def safe_md(text):  # bot-written markdown: raw HTML is shown as text, script-ish URLs dropped
+    md = markdown.Markdown(extensions=["tables", "fenced_code", "sane_lists"])
+    md.preprocessors.deregister("html_block")
+    md.inlinePatterns.deregister("html")
+    out = md.convert(text)
+    return re.sub(r'(href|src)="\s*(javascript|vbscript|data):[^"]*"', r'\1="#"', out, flags=re.I)
 
 
 def md_links(text):  # foo.md -> foo.html
@@ -47,7 +82,7 @@ def states(body):  # status cells as signage
 
 def render(src, dst, root, rel):
     raw = open(src, encoding="utf-8", errors="replace").read()
-    body = md_links(markdown.markdown(raw, extensions=["tables", "fenced_code", "sane_lists"]))
+    body = md_links(safe_md(raw))
     body = states(sections(body))
     kind = "forum" if rel.startswith(os.path.join("town", "forum")) else "page"
     if rel == os.path.join("town", "index.md"):  # hero actions on the town page
@@ -82,8 +117,19 @@ for top in ("town", "reports"):
             s, t = os.path.join(d, f), os.path.join(OUT, rel, f)
             if f.endswith(".md"):
                 render(s, t[:-3] + ".html", root, os.path.relpath(s, ROOT))
+            elif f.lower().endswith(ACTIVE):
+                shutil.copy2(s, t + ".txt")
+                if f.lower().endswith(VIEWABLE) and rel.startswith(os.path.join("town", "bots")):
+                    viewer(s, t + ".view.html", root, os.path.relpath(s, ROOT))
             else:
                 shutil.copy2(s, t)
+
+# builds index: every bot page and picture, each opened in its sandbox viewer
+tmp = os.path.join(OUT, "town", "_builds.md")
+rows = "\n".join(f"- [{p}]({h[:-5]}.md), by {b}" for b, p, h in sorted(BUILDS))
+open(tmp, "w").write("# Builds\n\nPages and pictures the bots made, each run in a sandbox with no network access.\n\n"
+                     + (rows or "_Nothing built yet._") + "\n")
+render(tmp, os.path.join(OUT, "town", "builds.html"), "../", os.path.join("town", "builds.md")); os.remove(tmp)
 
 # reports index (chronicler writes YYYY-MM-DD.md)
 rep = sorted((f[:-3] for f in os.listdir(os.path.join(ROOT, "reports")) if f.endswith(".md")), reverse=True) \
