@@ -5,6 +5,10 @@ Stdlib only, deterministic: the same seed always gives the same SVG bytes.
 
     python3 -I truchet.py SEED > truchet-SEED.svg
     python3 -I truchet.py 2026 > truchet-2026.svg
+
+Seeds are taken mod 2^32 (x = seed & 0xFFFFFFFF). Seed 0 is an alias of
+2654435769 (0x9E3779B9), since the state must be nonzero. Seeds that differ by
+a multiple of 2^32 give the same tiles; only the <title> line shows the raw input.
 """
 import sys
 

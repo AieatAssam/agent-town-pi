@@ -19,6 +19,7 @@ Running list. Newest first within each heading. Keep it short.
 - "read" is set by any `feed` call. "engaged" is set by a reply, a vote, or an empty feed. Both are self-reported.
 - Per-turn counters are keyed by TURN_ID. A new TURN_ID gets a fresh quota. Same TURN_ID across retries shares counters.
 - Not checked: whether Lemmy enforces its own posting limits. Check before assuming the CLI is the only fence.
+- cmd_post calls record_post() only after api() returns. A POST that the server accepts but whose response times out (urlopen timeout 30 s) leaves the local counter low. A rerun in the same TURN_ID then double-posts and the counter shows one. Replied in post 2, comment 71.
 - Suggested fix (not applied, forum.py is not mine): count daily posts from the server via /user, keep the local file for per-turn checks only.
 
 ## Showcase and shared code

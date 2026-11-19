@@ -5,10 +5,15 @@ Iris, private check. Usage:
     python3 -I svg_arcs_png.py IN.svg OUT.png
 
 Approximations, stated so nobody mistakes this for a browser render:
-- Strokes are drawn as distance-to-segment bands (round caps), not butt caps.
-- Anti-aliasing is one-pixel linear coverage at the stroke edge.
-- Only what this SVG uses is parsed: M, A with rx == ry, and the
-  <path stroke="..."> groups with stroke-width taken from the parent <g>.
+- Strokes follow the SVG's stroke-linecap. The generator sets "butt" on its
+  <g>, and this tool honours that: each arc is an annular sector cut by two
+  radial lines at its ends. Only butt caps are implemented; any other cap
+  value is refused rather than silently drawn as butt.
+- Anti-aliasing is one-pixel linear coverage at each edge (radial edges and
+  both cut lines), multiplied together. Corners where edges meet are therefore
+  approximate.
+- Only what this SVG uses is parsed: M, A with rx == ry, and <path stroke="...">
+  inside <g> elements that carry stroke-width and stroke-linecap.
 """
 import math
 import re
@@ -25,12 +30,15 @@ def parse_hex(c):
     return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def arc_points(x0, y0, r, large, sweep, x1, y1, steps=24):
-    """Polyline for a circular arc from (x0,y0) to (x1,y1), SVG endpoint rules."""
+def arc_centre(x0, y0, r, large, sweep, x1, y1):
+    """Centre and signed sweep (radians) for a circular arc, SVG endpoint rules.
+
+    Returns (cx, cy, a0, delta): start angle a0 and signed angular span delta.
+    """
     dx, dy = (x1 - x0) / 2, (y1 - y0) / 2
     d2 = dx * dx + dy * dy
     if d2 == 0:
-        return [(x0, y0)]
+        return x0, y0, 0.0, 0.0
     k = math.sqrt(max(r * r - d2, 0.0)) / math.sqrt(d2)
     mx, my = (x0 + x1) / 2, (y0 + y1) / 2
     cands = [(mx - k * dy, my + k * dx), (mx + k * dy, my - k * dx)]
@@ -48,18 +56,17 @@ def arc_points(x0, y0, r, large, sweep, x1, y1, steps=24):
         cx, cy = cands[0]
         best = (cx, cy, (x0 - cx, y0 - cy), 0.0)
     cx, cy, v1, delta = best
-    a0 = math.atan2(v1[1], v1[0])
-    pts = []
-    for i in range(steps + 1):
-        a = a0 + delta * i / steps
-        pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
-    return pts
+    return cx, cy, math.atan2(v1[1], v1[0]), delta
 
 
-def path_segments(d):
-    """Turn path data (M and A only, absolute) into line segments."""
+def path_arcs(d):
+    """Turn path data (M and A only, absolute) into arc descriptors.
+
+    Each arc is (cx, cy, radius, a0, delta). Every A is one arc; a new M
+    starts a new subpath, so each arc in this SVG has its own two butt ends.
+    """
     toks = re.findall(r"[MA]|-?\d*\.?\d+(?:e-?\d+)?", d)
-    segs, i, cur, start = [], 0, None, None
+    arcs, i, cur = [], 0, None
     while i < len(toks):
         t = toks[i]
         if t == "M":
@@ -72,13 +79,37 @@ def path_segments(d):
             x1, y1 = float(toks[i + 6]), float(toks[i + 7])
             if abs(rx - ry) > 1e-9:
                 raise ValueError("elliptical arc not supported")
-            pts = arc_points(cur[0], cur[1], rx, large, sweep, x1, y1)
-            segs.extend(zip(pts, pts[1:]))
+            cx, cy, a0, delta = arc_centre(cur[0], cur[1], rx, large, sweep, x1, y1)
+            arcs.append((cx, cy, rx, a0, delta))
             cur = (x1, y1)
             i += 8
             continue
         raise ValueError(f"unexpected token {t!r}")
-    return segs
+    return arcs
+
+
+def clamp01(v):
+    return 0.0 if v <= 0.0 else (1.0 if v >= 1.0 else v)
+
+
+def butt_coverage(px, py, arc, half_w):
+    """Coverage of pixel (px, py) by an annular sector with butt ends."""
+    cx, cy, R, a0, delta = arc
+    if delta == 0:
+        return 0.0
+    vx, vy = px + 0.5 - cx, py + 0.5 - cy
+    radial = clamp01(half_w + 0.5 - abs(math.hypot(vx, vy) - R))
+    if radial <= 0.0:
+        return 0.0
+    sgn = 1.0 if delta > 0 else -1.0
+    # Start cut: the sector lies on the side the arc travels toward.
+    u0x, u0y = math.cos(a0), math.sin(a0)
+    s0 = vx * (-u0y * sgn) + vy * (u0x * sgn)
+    # End cut: the sector lies on the side it came from.
+    a1 = a0 + delta
+    u1x, u1y = math.cos(a1), math.sin(a1)
+    s1 = -(vx * (-u1y * sgn) + vy * (u1x * sgn))
+    return radial * clamp01(s0 + 0.5) * clamp01(s1 + 0.5)
 
 
 def main(argv):
@@ -91,22 +122,20 @@ def main(argv):
     paper = (244, 239, 230)
     buf = [[paper] * W for _ in range(H)]
     for g in root.iter(NS + "g"):
+        cap = g.get("stroke-linecap", "butt")
+        if cap != "butt":
+            raise ValueError(f"stroke-linecap {cap!r} not implemented; only butt")
         sw = float(g.get("stroke-width", "1"))
+        r = sw / 2
         for p in g.iter(NS + "path"):
             colour = parse_hex(p.get("stroke", "#000000"))
-            r = sw / 2
-            for (ax, ay), (bx, by) in path_segments(p.get("d")):
-                x_lo, x_hi = int(math.floor(min(ax, bx) - r - 1)), int(math.ceil(max(ax, bx) + r + 1))
-                y_lo, y_hi = int(math.floor(min(ay, by) - r - 1)), int(math.ceil(max(ay, by) + r + 1))
-                vx, vy = bx - ax, by - ay
-                L2 = vx * vx + vy * vy or 1e-12
+            for cx, cy, R, a0, delta in path_arcs(p.get("d")):
+                reach = R + r + 1
+                x_lo, x_hi = int(math.floor(cx - reach)), int(math.ceil(cx + reach))
+                y_lo, y_hi = int(math.floor(cy - reach)), int(math.ceil(cy + reach))
                 for py in range(max(y_lo, 0), min(y_hi, H)):
                     for px in range(max(x_lo, 0), min(x_hi, W)):
-                        qx, qy = px + 0.5 - ax, py + 0.5 - ay
-                        t = max(0.0, min(1.0, (qx * vx + qy * vy) / L2))
-                        dx, dy = qx - t * vx, qy - t * vy
-                        dist = math.sqrt(dx * dx + dy * dy)
-                        cov = max(0.0, min(1.0, r + 0.5 - dist))
+                        cov = butt_coverage(px, py, (cx, cy, R, a0, delta), r)
                         if cov > 0:
                             bg = buf[py][px]
                             buf[py][px] = tuple(round(bg[k] * (1 - cov) + colour[k] * cov) for k in range(3))
