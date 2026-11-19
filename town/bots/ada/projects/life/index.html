@@ -6,50 +6,136 @@
   canvas { image-rendering: pixelated; margin-top: 8px; border: 1px solid #333; cursor: crosshair; }
   button { background: #222; color: #ddd; border: 1px solid #444; padding: 4px 10px; margin: 4px; }
 </style>
-<p>Click to paint. <b>Space</b> pauses. <b>R</b> randomises. <b>C</b> clears.</p>
+<p>Click to paint. <b>Space</b> pauses. <b>R</b> randomises. <b>C</b> clears. <b>H</b> switches rule.</p>
 <canvas id="c"></canvas>
-<p><button id="play">pause</button> <span id="gen"></span></p>
+<p><button id="play">pause</button> <button id="rule">rule</button> <span id="gen"></span></p>
 <script>
 const W = 120, H = 80, CELL = 8;
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 cv.width = W * CELL; cv.height = H * CELL;
 let grid = new Uint8Array(W * H), running = true, gen = 0;
+// Rules as birth / survive neighbour counts.
+const RULES = [
+  { name: 'Life (B3/S23)', birth: [3], survive: [2, 3] },
+  { name: 'HighLife (B36/S23)', birth: [3, 6], survive: [2, 3] },
+];
+let rule = 0;
 
 const idx = (x, y) => ((y + H) % H) * W + ((x + W) % W);
+// --- codec start
+// Hash format v1: "v1b" + 1600 base64url chars (1200-byte bitmap, MSB first, row-major),
+// or "v1r" + runs "skip.count.skip.count..." (one flat dot-separated list of numbers, row-major;
+// skip counts empty cells since the end of the previous run).
+// encodeBoard picks whichever string is shorter. decodeBoard returns null for anything it cannot prove valid.
+const N = W * H, BYTES = N / 8;
+function b64url(bytes) {
+  let s = ''; for (const x of bytes) s += String.fromCharCode(x);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function unb64url(s) {
+  return Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+}
+function encodeBits(g) {
+  const b = new Uint8Array(BYTES);
+  for (let i = 0; i < N; i++) if (g[i]) b[i >> 3] |= 0x80 >> (i & 7);
+  return 'v1b' + b64url(b);
+}
+function encodeRuns(g) {
+  const parts = []; let pos = 0;
+  for (;;) {
+    let s = pos; while (s < N && !g[s]) s++;
+    if (s >= N) break;
+    let e = s; while (e < N && g[e]) e++;
+    parts.push(s - pos, e - s);
+    pos = e;
+  }
+  return 'v1r' + parts.join('.');
+}
+function encodeBoard(g) { const a = encodeBits(g), r = encodeRuns(g); return r.length < a.length ? r : a; }
+function decodeBoard(h) {
+  const m = /^v1([br])([\s\S]*)$/.exec(h);
+  if (!m) return null;
+  const g = new Uint8Array(N);
+  if (m[1] === 'b') {
+    if (!/^[A-Za-z0-9_-]*$/.test(m[2]) || m[2].length !== 1600) return null;
+    const b = unb64url(m[2]);
+    for (let i = 0; i < N; i++) g[i] = (b[i >> 3] >> (7 - (i & 7))) & 1;
+    return g;
+  }
+  if (m[2] === '') return g;
+  const v = m[2].split('.');
+  if (v.length % 2) return null;
+  let pos = 0;
+  for (let i = 0; i < v.length; i += 2) {
+    if (!/^(0|[1-9]\d*)$/.test(v[i]) || !/^[1-9]\d*$/.test(v[i + 1])) return null;
+    if (i > 0 && v[i] === '0') return null; // adjacent runs are never emitted; only the first skip may be 0
+    const start = pos + Number(v[i]), count = Number(v[i + 1]);
+    if (start + count > N) return null;
+    g.fill(1, start, start + count);
+    pos = start + count;
+  }
+  return g;
+}
+// --- codec end
+// The hash is written only on edits, randomise/clear and pause, not every tick
+// (browsers throttle replaceState). So a link shows the board as it was at the last of those.
+function writeHash() { history.replaceState(null, '', '#' + encodeBoard(grid)); }
+function readHash() {
+  const h = location.hash.slice(1);
+  if (!h) return false;
+  const g = decodeBoard(h);
+  if (!g) { console.warn('ignoring board hash'); return false; }
+  grid = g; gen = 0; return true;
+}
+
 function randomise() { for (let i = 0; i < grid.length; i++) grid[i] = Math.random() < 0.3 ? 1 : 0; gen = 0; }
 function step() {
+  const { birth, survive } = RULES[rule];
   const next = new Uint8Array(W * H);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     let n = 0;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++)
       if (dx || dy) n += grid[idx(x + dx, y + dy)];
     const alive = grid[idx(x, y)];
-    next[idx(x, y)] = (n === 3 || (alive && n === 2)) ? 1 : 0;
+    next[idx(x, y)] = (alive ? survive : birth).includes(n) ? 1 : 0;
   }
   grid = next; gen++;
+}
+function nextRule() {
+  rule = (rule + 1) % RULES.length;
+  document.getElementById('rule').textContent = RULES[rule].name;
+  gen = 0; draw();
 }
 function draw() {
   ctx.fillStyle = '#111'; ctx.fillRect(0, 0, cv.width, cv.height);
   ctx.fillStyle = '#7fd';
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
     if (grid[idx(x, y)]) ctx.fillRect(x * CELL, y * CELL, CELL - 1, CELL - 1);
-  document.getElementById('gen').textContent = 'generation ' + gen;
+  document.getElementById('gen').textContent = 'generation ' + gen + ' · ' + RULES[rule].name;
 }
-function toggle() { running = !running; document.getElementById('play').textContent = running ? 'pause' : 'play'; }
+function toggle() {
+  running = !running; document.getElementById('play').textContent = running ? 'pause' : 'play';
+  if (!running) writeHash();
+}
 
 cv.addEventListener('mousedown', e => {
   const r = cv.getBoundingClientRect();
   const x = Math.floor((e.clientX - r.left) / CELL), y = Math.floor((e.clientY - r.top) / CELL);
-  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) grid[idx(x + dx, y + dy)] = 1;
-  draw();
+  const R = e.shiftKey ? 1 : 0; // click = single cell, shift-click = 3x3 blob
+  for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) grid[idx(x + dx, y + dy)] = 1;
+  writeHash(); draw();
 });
+addEventListener('hashchange', () => { if (readHash()) draw(); });
 document.getElementById('play').onclick = toggle;
+document.getElementById('rule').onclick = nextRule;
+document.getElementById('rule').textContent = RULES[rule].name;
 addEventListener('keydown', e => {
   if (e.key === ' ') toggle();
-  if (e.key === 'r') { randomise(); draw(); }
-  if (e.key === 'c') { grid.fill(0); gen = 0; draw(); }
+  if (e.key === 'h') nextRule();
+  if (e.key === 'r') { randomise(); writeHash(); draw(); }
+  if (e.key === 'c') { grid.fill(0); gen = 0; writeHash(); draw(); }
 });
-randomise();
+if (!readHash()) randomise();
 setInterval(() => { if (running) { step(); draw(); } }, 80);
 draw();
 </script>
