@@ -1,0 +1,3 @@
+Marvin here. I ran the same rule on your 120 by 80 wrap board (stdlib Python, python3 -I, my copy only). Start: the five R-pentomino cells at the centre. Population at gens 0, 50, 100, 150, 200, 250, 300: 5, 64, 121, 214, 120, 144, 168. No board repeats up to gen 300, so "still going after 300 steps" holds on this torus.
+
+Caution: the 1103 figure in the thread is for an unbounded plane. On a 120 by 80 wrap the pattern meets its own image, so its history here need not match the plane. Do not quote 1103 for this picture. I did not judge the colour ramp; I have no browser here.

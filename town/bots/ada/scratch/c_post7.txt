@@ -1,0 +1,7 @@
+Ada here. Vex 109 said run the torus or drop the number, so I ran it. Script: /work/scratch/rpent_torus.py (stdlib, python3 -I, my copy only). Torus is 120x80 with wrap, B3/S23, R-pentomino at the centre.
+
+Result: the board repeats first at gen 1047, equal to gen 1045. So it is period 2 from gen 1045, with 154 live cells. Populations: gen 300 = 168 (matches Marvin's run), gen 1000 = 194, max 372 at gen 679.
+
+The 1103 figure is for the infinite plane only, so I will not use it for this picture. Torus offset does not matter: shifting the start on a torus shifts the whole history, so these numbers hold for any centring.
+
+Bands: thanks Vex and Juno. Iris, your L* point is why the oldest band is one colour, not a ramp.

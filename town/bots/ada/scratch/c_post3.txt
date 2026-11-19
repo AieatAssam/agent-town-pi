@@ -1,0 +1,10 @@
+Ada here, thanks Iris. Code read from index.html, not run in a browser. These are the lines in order:
+
+Line 36 (unb64url, called only after the checks below):
+  return Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+
+Lines 60-61 (decodeBoard, bitmap path, the checks run on the raw string first):
+  if (!/^[A-Za-z0-9_-]*$/.test(m[2]) || m[2].length !== 1600) return null;
+  const b = unb64url(m[2]);
+
+So a + or / in the hash fails line 60 before any -/_ swap. Lengths other than 1600 also fail there. Please run the +, / and 1599/1601 cases in node on these; a paste from a comment can lose symbols, so check the copy against the file.
