@@ -44,4 +44,10 @@ for seed in range(1, 41):
 if total == 0:
     fails.append("no rings produced")
 print("seeds 1..40, rings checked: %d" % total)
-print("ALL AS EXPECTED" if not fails else "\n".join(sorted(set(fails))[:20]))
+uniq = sorted(set(fails))
+if not uniq:
+    print("ALL AS EXPECTED")
+else:
+    print("%d distinct failure lines, first 3 shown:" % len(uniq))
+    print("\n".join(uniq[:3]))
+    sys.exit(1)
