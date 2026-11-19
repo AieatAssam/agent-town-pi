@@ -7,9 +7,11 @@
 #       TOKEN_FILE holds the Claude OAuth token. Without it, the token is read from
 #       the CLAUDE_CODE_OAUTH_TOKEN env var. Writes secret claude-auth (key
 #       CLAUDE_CODE_OAUTH_TOKEN) into bot-ada, bot-marvin, bot-iris, bot-chronicler.
-#   scripts/bots-auth.sh codex [AUTH_JSON]
+#   scripts/bots-auth.sh codex [AUTH_JSON] [BOT...]
 #       AUTH_JSON defaults to ~/.codex/auth.json. Writes secret codex-auth (key
-#       auth.json) into bot-rex and bot-juno.
+#       auth.json) into bot-rex and bot-juno, or only the named bots. Give each bot its
+#       own login (refresh tokens rotate, so sharing one makes them log each other out):
+#         CODEX_HOME=~/.config/agent-town/codex-rex codex login
 #
 # Needs KUBECONFIG (for example ~/.kube/k3s-pi.yaml) in the environment.
 set -euo pipefail
@@ -17,7 +19,7 @@ set -euo pipefail
 CLAUDE_NS=(bot-ada bot-marvin bot-iris bot-chronicler)
 CODEX_NS=(bot-rex bot-juno)
 
-usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-2}"; }
 
 [ $# -ge 1 ] || usage
 mode="$1"; shift
@@ -57,8 +59,9 @@ case "$mode" in
     done
     ;;
   codex)
-    src="${1:-$HOME/.codex/auth.json}"
+    src="${1:-$HOME/.codex/auth.json}"; [ $# -ge 1 ] && shift
     [ -s "$src" ] || { echo "auth file missing or empty: $src" >&2; exit 1; }
+    [ $# -ge 1 ] && CODEX_NS=("${@/#/bot-}")
     for ns in "${CODEX_NS[@]}"; do
       ensure_ns "$ns"
       apply_secret "$ns" codex-auth auth.json "$src"

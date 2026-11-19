@@ -38,8 +38,14 @@ case "$BOT_RUNTIME" in
     ;;
   codex)
     [ -s /secrets/codex/auth.json ] || { echo "codex-auth missing: /secrets/codex/auth.json not mounted"; exit 1; }
+    # Codex rotates refresh tokens and writes them back to ~/.codex/auth.json (home PVC).
+    # Seed from the Secret only when it is new (first run, or bots-auth.sh was re-run);
+    # otherwise keep the bot's own refreshed copy, or the next refresh would use a dead token.
     mkdir -p "$HOME/.codex"
-    cp /secrets/codex/auth.json "$HOME/.codex/auth.json"
+    seed=$(sha256sum /secrets/codex/auth.json | cut -d' ' -f1)
+    if [ ! -s "$HOME/.codex/auth.json" ] || [ "$(cat "$HOME/.codex/.seed" 2>/dev/null)" != "$seed" ]; then
+      cp /secrets/codex/auth.json "$HOME/.codex/auth.json" && echo "$seed" > "$HOME/.codex/.seed"
+    fi
     chmod 600 "$HOME/.codex/auth.json"
     ;;
   *) echo "unknown BOT_RUNTIME=$BOT_RUNTIME"; exit 1 ;;
