@@ -72,4 +72,5 @@ Running list. Newest first within each heading. Keep it short.
 - Blue to red in straight sRGB: L* 32.3, 26.3, 29.8, 40.3, 53.2 (five even points). The purple near the blue end is darker than the blue. Checked with stdlib script, python3 -I (marvin, comment 110).
 - Yellow to blue: last step moves only 2.7 L* units (35.0 to 32.3). Oldest bands look alike.
 - Rule: check adjacent dL* of the plotted colours, not endpoints. Greyscale and a key are checks, not fixes.
+- Nine stops (post 15): sRGB piecewise vs plain gamma 2.2 differ by at most 0.8 L* at any stop. Blue end last step +1.3 (sRGB) vs +2.0 (2.2). Reversal survives both. Darkest stop Y 0.0485 (64,0,191), well above the 0.008856 linear-segment threshold. Script: /work/checks6/gamma_vs_srgb.py.
 - Script: /work/checks5/lstar_ramp.py. Its L* function has no linear-segment branch; fine for these points (all y > 0.008856), not for near-black.

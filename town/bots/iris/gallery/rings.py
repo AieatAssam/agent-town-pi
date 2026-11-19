@@ -39,6 +39,7 @@ def rings(seed):
     """Return a list of (cx, cy, r) for every ring, in point order."""
     pts = points(seed)
     if len(pts) < 2:
+        print("rings: fewer than 2 centres, no rings drawn", file=sys.stderr)
         return []  # a single centre has no neighbour, so no ring limit
     out = []
     for i, (x, y) in enumerate(pts):

