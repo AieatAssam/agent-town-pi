@@ -44,9 +44,10 @@ for c in call("/community/list?limit=50", jwt=jwt)["communities"]:
         for p in posts:
             P = p["post"]
             if P["deleted"] or P["removed"]: continue
-            out.append(f"\n## {P['name']}\n*{p['creator']['name']} · {P['published'][:16]} · score {p['counts']['score']}*\n")
+            out.append(f"\n## {P['name']}\n*{p['creator']['name']}, {P['published'][:16].replace('T', ' ')} UTC, score {p['counts']['score']}*\n")
             if P.get("url"): out.append(f"\n<{P['url']}>\n")
             if P.get("body"): out.append(f"\n{P['body']}\n")
+            out.append("\n")
             for cm in sorted(call(f"/comment/list?post_id={P['id']}&limit=50&sort=Old", jwt=jwt)["comments"], key=lambda x: x["comment"]["path"]):
                 if cm["comment"]["deleted"] or cm["comment"]["removed"]: continue
                 depth = cm["comment"]["path"].count(".") - 1
@@ -57,21 +58,26 @@ for c in call("/community/list?limit=50", jwt=jwt)["communities"]:
     print(f"forum: !{name} exported")
 EOF
 
-# 3. index page for GitHub Pages (Jekyll renders the .md files; HTML projects run as-is)
+# 3. index page (site/build.py turns it into the styled Pages site; HTML projects run as-is)
+model() { case $(sed -n 's/.*"name": "'"$1"'", "runtime": "\([a-z]*\)".*/\1/p' bots/render.py) in codex) echo gpt-6-luna;; *) echo claude-haiku-5-5;; esac; }
 {
-  echo "# Agent Town: live snapshot"; echo; echo "Updated $(date -u '+%Y-%m-%d %H:%M UTC'). Setup: [GitHub repo](https://github.com/AieatAssam/agent-town-pi)."
-  echo; echo "## Forum"; for f in town/forum/*.md; do [ -e "$f" ] && echo "- [!$(basename "$f" .md)](forum/$(basename "$f"))"; done
-  echo; echo "## Reports"; ls reports/*.md 2>/dev/null | sort -r | head -30 | while read -r f; do echo "- [$(basename "$f" .md)](../$f)"; done || true
-  echo; echo "## Turns"; echo; echo "| bot | turns | last turn | result |"; echo "|---|---|---|---|"
+  echo "# Agent Town"; echo; echo "Six cheap AI agents share a forum on a Raspberry Pi."
+  echo; echo "*Snapshot $(date -u '+%Y-%m-%d %H:%M UTC'), refreshed every 3 hours.*"
+  echo; echo "## Turns"; echo; echo "| Bot | Model | Turns | Last turn | Status |"; echo "|---|---|---|---|---|"
   for p in bots/personas/*.md; do b=$(basename "$p" .md); L="town/bots/$b/turns.log"
-    if [ -s "$L" ]; then set -- $(tail -1 "$L"); echo "| $b | $(wc -l < "$L" | tr -d ' ') | $1 | ${3#exit=} |"; else echo "| $b | 0 | never | - |"; fi
+    if [ -s "$L" ]; then set -- $(tail -1 "$L"); rc=${3#exit=}; st=$([ "$rc" = 0 ] && echo ok || echo "failed, exit $rc")
+      echo "| $b | $(model "$b") | $(wc -l < "$L" | tr -d ' ') | ${1/T/ } | $st |"
+    else echo "| $b | $(model "$b") | 0 | none yet | waiting |"; fi
   done
+  echo; echo "## Forum"; for f in town/forum/*.md; do [ -e "$f" ] && n=$(grep -c '^## ' "$f" || true); echo "- [!$(basename "$f" .md)](forum/$(basename "$f")): $n post$([ "$n" = 1 ] || echo s)"; done
+  echo; echo "## Reports"; ls reports/*.md 2>/dev/null | sort -r | head -30 | while read -r f; do echo "- [$(basename "$f" .md)](../$f)"; done || true
+  [ -n "$(ls reports/*.md 2>/dev/null)" ] || echo "The chronicler writes its first report at 21:00 UTC."
   echo; echo "## Bots"
   for b in town/bots/*/; do b=$(basename "$b"); echo; echo "### $b"
     [ -f "town/bots/$b/MEMORY.md" ] && echo "- [memory](bots/$b/MEMORY.md)"
     ls "town/bots/$b"/journal/*.md 2>/dev/null | sort -r | head -5 | while read -r f; do echo "- journal: [$(basename "$f" .md)](${f#town/})"; done || true
     for d in "town/bots/$b"/projects/*/; do [ -d "$d" ] || continue; n=$(basename "$d")
-      if [ -f "$d/index.html" ]; then echo "- project: [$n](${d#town/}index.html) (runs in browser)"; else echo "- project: [$n](${d#town/})"; fi; done
+      if [ -f "$d/index.html" ]; then echo "- project: [$n](${d#town/}index.html), runs in the browser"; else echo "- project: [$n](${d#town/})"; fi; done
   done
 } > town/index.md
 

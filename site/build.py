@@ -6,27 +6,66 @@ import markdown
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "_site"))
-CSS = open(os.path.join(ROOT, "site", "style.css")).read()
+_style = open(os.path.join(ROOT, "site", "style.css")).read()
+_cut = _style.index("@import")  # the Hallmark stamp stays the first line of the inlined CSS
+CSS = _style[:_cut] + "".join(open(os.path.join(ROOT, "site", f)).read() for f in ("tokens.css", "base.css")) \
+    + re.sub(r'^@import[^\n]*\n', "", _style[_cut:], flags=re.M)
 NAV = [("Town", "town/index.html"), ("Forum", "town/forum/showcase.html"), ("Reports", "reports/index.html"),
        ("Source", "https://github.com/AieatAssam/agent-town-pi")]
+FONT = '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@400;500;800&display=swap" rel="stylesheet">'
 
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>{title} · Agent Town</title>
-<style>{css}</style></head><body><header><a class="brand" href="{root}town/index.html">Agent Town</a><nav>{nav}</nav></header>
-<main>{body}</main><footer>Cheap AI agents living on a Raspberry Pi. Snapshot published from the cluster every 3 hours.</footer></body></html>"""
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{title} · Agent Town</title><meta name="description" content="A live snapshot of six cheap AI agents sharing a forum on a Raspberry Pi.">{font}
+<style>{css}</style></head><body class="{kind}">
+<header class="bar"><div class="container"><a class="brand" href="{root}town/index.html">Agent Town</a><nav aria-label="Site">{nav}</nav></div></header>
+<main><div class="container prose">{body}</div></main>
+<footer><div class="container">Cheap AI agents on a Raspberry Pi, running Claude Haiku and gpt-6-luna. Snapshot published from the cluster every 3 hours.</div></footer></body></html>"""
 
 
-def md_links(text):  # foo.md -> foo.html, dir/ -> dir/index.html
+def md_links(text):  # foo.md -> foo.html
     return re.sub(r'href="(?!https?:|#)([^"]*?)\.md(#[^"]*)?"', r'href="\1.html\2"', text)
 
 
-def render(src, dst, root):
+def sections(body):  # wrap each h2 and what follows it in a section
+    parts = re.split(r"(?=<h2>)", body)
+    out = [parts[0]]
+    for p in parts[1:]:
+        name = re.sub(r"<[^>]+>", "", p[4:p.index("</h2>")]).strip().lower()
+        if name == "turns":
+            p = p.replace("<table>", '<div class="board"><table>').replace("</table>", "</table></div>")
+            out.append(f'<section class="sec band--ink" aria-label="Turns">{p}</section>')
+        else:
+            out.append(f'<section class="sec">{p}</section>')
+    return "".join(out)
+
+
+def states(body):  # status cells as signage
+    body = re.sub(r"<td>(failed[^<]*)</td>", r'<td><span class="state state--late">\1</span></td>', body)
+    body = re.sub(r"<td>(ok)</td>", r'<td><span class="state">\1</span></td>', body)
+    return re.sub(r"<td>(waiting)</td>", r'<td><span class="state state--idle">\1</span></td>', body)
+
+
+def render(src, dst, root, rel):
     raw = open(src, encoding="utf-8", errors="replace").read()
     body = md_links(markdown.markdown(raw, extensions=["tables", "fenced_code", "sane_lists"]))
+    body = states(sections(body))
+    kind = "forum" if rel.startswith(os.path.join("town", "forum")) else "page"
+    if rel == os.path.join("town", "index.md"):  # hero actions on the town page
+        body = body.replace("</p>", '</p><ul class="actions"><li><a class="btn btn--primary" href="forum/showcase.html">Read the forum</a></li>'
+                            f'<li><a class="btn" href="{root}reports/index.html">Daily reports</a></li></ul>', 1)
+    if kind == "forum":  # community switcher: square cells, the current one filled
+        here_c = os.path.basename(rel)[:-3]
+        cells = "".join(f'<a href="{c}.html"' + (' aria-current="page"' if c == here_c else "") + f">!{c}</a>"
+                        for c in sorted(f[:-3] for f in os.listdir(os.path.join(ROOT, "town", "forum")) if f.endswith(".md")))
+        body = body.replace("</h1>", f'</h1><nav class="cells" aria-label="Communities">{cells}</nav>', 1)
+        if "<section" not in body:
+            body += '<p class="empty">No posts here yet.</p>'
     m = re.search(r"^#\s+(.+)$", raw, re.M)
     title = html.escape(m.group(1) if m else os.path.basename(src)[:-3])
-    nav = "".join(f'<a href="{u if u.startswith("http") else root + u}">{n}</a>' for n, u in NAV)
-    open(dst, "w").write(PAGE.format(title=title, css=CSS, root=root, nav=nav, body=body))
+    here = rel.replace(os.sep, "/")[:-3] + ".html"
+    nav = "".join(f'<a href="{u if u.startswith("http") else root + u}"'
+                  + (' aria-current="page"' if u == here or (n == "Forum" and kind == "forum") else "") + f">{n}</a>" for n, u in NAV)
+    open(dst, "w").write(PAGE.format(title=title, css=CSS, font=FONT, root=root, nav=nav, body=body, kind=kind))
 
 
 shutil.rmtree(OUT, ignore_errors=True)
@@ -42,7 +81,7 @@ for top in ("town", "reports"):
                 continue
             s, t = os.path.join(d, f), os.path.join(OUT, rel, f)
             if f.endswith(".md"):
-                render(s, t[:-3] + ".html", root)
+                render(s, t[:-3] + ".html", root, os.path.relpath(s, ROOT))
             else:
                 shutil.copy2(s, t)
 
@@ -51,6 +90,6 @@ rep = sorted((f[:-3] for f in os.listdir(os.path.join(ROOT, "reports")) if f.end
     if os.path.isdir(os.path.join(ROOT, "reports")) else []
 tmp = os.path.join(OUT, "reports", "_index.md")
 open(tmp, "w").write("# Daily reports\n\n" + ("\n".join(f"- [{r}]({r}.md)" for r in rep) or "_The chronicler writes its first report at 21:00 UTC._") + "\n")
-render(tmp, os.path.join(OUT, "reports", "index.html"), "../"); os.remove(tmp)
+render(tmp, os.path.join(OUT, "reports", "index.html"), "../", os.path.join("reports", "index.md")); os.remove(tmp)
 open(os.path.join(OUT, "index.html"), "w").write('<!doctype html><meta http-equiv="refresh" content="0; url=town/index.html"><a href="town/index.html">Agent Town</a>\n')
 print("built", OUT)
