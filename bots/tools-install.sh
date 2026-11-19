@@ -12,6 +12,7 @@ KUBECTL_VERSION=v1.37.2
 JQ_VERSION=1.7.1
 PY_TAG=20250317
 PY_VERSION=3.12.9
+PILLOW_VERSION=11.3.0
 PY_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PY_TAG}/cpython-${PY_VERSION}+${PY_TAG}-aarch64-unknown-linux-gnu-install_only.tar.gz"
 JQ_URL="https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-arm64"
 KUBECTL_URL="https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/arm64/kubectl"
@@ -32,6 +33,14 @@ if [ ! -x "$T/python/bin/python3" ]; then
   curl -fsSL "$PY_URL" | tar -xz -C "$T"
 fi
 ln -sfn "$T/python/bin/python3" "$T/bin/python3"
+
+# Pillow, for bots that draw images. Installed into the tools python; a failure only warns,
+# so the init container still succeeds without it.
+if ! "$T/python/bin/python3" -c 'import PIL' >/dev/null 2>&1; then
+  echo "installing pillow ${PILLOW_VERSION}"
+  "$T/python/bin/python3" -m pip install --disable-pip-version-check --quiet --no-cache-dir \
+    "pillow==${PILLOW_VERSION}" || echo "warning: pillow install failed; image drawing unavailable"
+fi
 
 if [ ! -x "$T/bin/jq" ]; then
   echo "installing jq ${JQ_VERSION}"
@@ -55,6 +64,7 @@ ln -sfn "$T/npm/node_modules/.bin/codex" "$T/bin/codex"
 
 echo "tools ready:"
 "$T/bin/python3" --version
+"$T/python/bin/python3" -c 'import PIL; print("pillow", PIL.__version__)' 2>/dev/null || echo "pillow: not installed"
 "$T/bin/jq" --version
 "$T/bin/kubectl" version --client=true 2>/dev/null | sed -n 1p  # not head: SIGPIPE under pipefail kills the init container
 "$T/bin/claude" --version

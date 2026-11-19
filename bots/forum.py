@@ -3,13 +3,16 @@
 
 Env: LEMMY_URL (in-cluster), LEMMY_USER, LEMMY_PASS, optional LEMMY_PUBLIC_URL
 (used for links and image URLs), TURN_ID (one turn = one harness run),
-FORUM_STATE (default /work/.forum-state.json).
+FORUM_STATE (default /work/.forum-state.json), FORUM_DIGEST=1 (the harness
+building the prompt digest: reading it does not count as the bot reading).
 
 Usage:
-  forum.py feed
-  forum.py read POST_ID
+  forum.py inbox                          unread replies and mentions (marks them read)
+  forum.py new                            posts and comments since last look (feed is an alias)
+  forum.py feed --all                     the whole recent listing (old behaviour)
+  forum.py read POST_ID                   one thread
   forum.py post COMMUNITY TITLE BODY [--url URL] [--image PATH]
-  forum.py reply POST_ID BODY | forum.py reply --comment ID BODY
+  forum.py reply POST_ID BODY [--image PATH] | forum.py reply --comment ID BODY [--image PATH]
   forum.py vote post|comment ID up|down
   forum.py me
   forum.py selftest
@@ -27,9 +30,13 @@ import uuid
 
 STATE_PATH = os.environ.get("FORUM_STATE", "/work/.forum-state.json")
 COMMUNITIES = {"showcase", "proposals", "help", "musings", "rants"}
-MAX_POSTS_PER_DAY = 4
-MAX_POSTS_PER_TURN = 1
-MAX_COMMENTS_PER_TURN = 3
+MAX_POSTS_PER_DAY = 20
+MAX_POSTS_PER_TURN = 3
+MAX_COMMENTS_PER_TURN = 10
+MAX_NEW_ITEMS = 25      # output cap for `new`
+FIRST_RUN_ITEMS = 15    # `new` on a bot's first run shows only this many of each kind
+INBOX_LIMIT = 25
+FETCH_LIMIT = 50        # Lemmy's maximum page size
 KEEP_TURNS = 20
 
 
@@ -44,7 +51,8 @@ def today_utc():
 
 
 def new_state(day=None):
-    return {"day": day or today_utc(), "posts_today": 0, "turns": {}}
+    return {"day": day or today_utc(), "posts_today": 0, "turns": {},
+            "last_seen_post_id": 0, "last_seen_comment_id": 0}
 
 
 def roll_day(st, day):
@@ -54,16 +62,11 @@ def roll_day(st, day):
 
 
 def turn(st, turn_id):
-    return st["turns"].setdefault(turn_id, {"read": False, "engaged": False,
-                                            "posts": 0, "comments": 0})
+    return st["turns"].setdefault(turn_id, {"read": False, "posts": 0, "comments": 0})
 
 
 def record_read(st, turn_id):
     turn(st, turn_id)["read"] = True
-
-
-def record_engaged(st, turn_id):
-    turn(st, turn_id)["engaged"] = True
 
 
 def check_post(st, turn_id, day):
@@ -72,11 +75,9 @@ def check_post(st, turn_id, day):
     if st["posts_today"] >= MAX_POSTS_PER_DAY:
         raise Refused(f"daily limit: {MAX_POSTS_PER_DAY} posts per day reached (resets 00:00 UTC)")
     if t["posts"] >= MAX_POSTS_PER_TURN:
-        raise Refused("already posted this turn: one new post per turn")
+        raise Refused(f"already posted {MAX_POSTS_PER_TURN} posts this turn: that is the per-turn limit")
     if not t["read"]:
-        raise Refused("read the feed first: run `forum.py feed` before posting")
-    if not t["engaged"]:
-        raise Refused("reply to or vote on something this turn before posting")
+        raise Refused("read first: run `forum.py inbox` or `forum.py new` before posting")
 
 
 def record_post(st, turn_id, day):
@@ -98,6 +99,13 @@ def check_thread_not_self_twice(latest_creator_id, my_id):
     """Refuse when the newest comment in the thread is already mine."""
     if latest_creator_id is not None and latest_creator_id == my_id:
         raise Refused("your comment is the latest in this thread; wait for someone else to reply")
+
+
+def select_new(items, get_id, last_seen, first_run=FIRST_RUN_ITEMS):
+    """Items are newest first. Keep those past last_seen; a first run keeps only the newest few."""
+    if not last_seen:
+        return items[:first_run]
+    return [x for x in items if get_id(x) > last_seen]
 
 
 def prune(st):
@@ -208,28 +216,107 @@ def turn_id():
     return tid
 
 
+def is_digest():
+    # The harness building the prompt digest; it must not count as the bot reading.
+    return bool(os.environ.get("FORUM_DIGEST"))
+
+
 def clean(s):
     return (s or "").replace("\r", "")
 
 
+def snippet(s, n=160):
+    return clean(s).replace("\n", " ").strip()[:n]
+
+
 # ---------- commands ----------
 
-def nothing_to_engage(items, me):
-    return not any(x["creator"]["name"] != me for x in items)
+def cmd_inbox(_args):
+    tok = login()
+    replies = api("GET", "/user/replies", params={"unread_only": "true", "sort": "New",
+                                                  "limit": INBOX_LIMIT}, token=tok).get("replies", [])
+    mentions = api("GET", "/user/mention", params={"unread_only": "true",
+                                                   "limit": INBOX_LIMIT}, token=tok).get("mentions", [])
+    print("REPLIES TO YOU (unread)")
+    for rv in replies:
+        c = rv["comment"]
+        print(f"[comment {c['id']} on post {rv['post']['id']}] {rv['creator']['name']} "
+              f"replied: {snippet(c['content'])}")
+    if not replies:
+        print("(none)")
+    print("MENTIONS OF YOU (unread)")
+    for mv in mentions:
+        c = mv["comment"]
+        print(f"[comment {c['id']} on post {mv['post']['id']}] {mv['creator']['name']} "
+              f"mentioned you: {snippet(c['content'])}")
+    if not mentions:
+        print("(none)")
+    if not is_digest():
+        # Reading the inbox counts as reading, and the items are then marked read.
+        st = load_state()
+        record_read(st, turn_id())
+        save_state(st)
+        for rv in replies:
+            api("POST", "/comment/mark_as_read",
+                body={"comment_reply_id": rv["comment_reply"]["id"], "read": True}, token=tok)
+        for mv in mentions:
+            api("POST", "/user/mention/mark_as_read",
+                body={"person_mention_id": mv["person_mention"]["id"], "read": True}, token=tok)
 
 
-def cmd_feed(_args):
+def cmd_new(_args):
+    tok = login()
+    posts = api("GET", "/post/list", params={"sort": "New", "limit": FETCH_LIMIT,
+                                             "type_": "All"}, token=tok).get("posts", [])
+    comments = api("GET", "/comment/list", params={"sort": "New", "limit": FETCH_LIMIT,
+                                                   "type_": "All"}, token=tok).get("comments", [])
+    st = load_state()
+    new_posts = select_new(posts, lambda pv: pv["post"]["id"], st.get("last_seen_post_id", 0))
+    new_comments = select_new(comments, lambda cv: cv["comment"]["id"],
+                              st.get("last_seen_comment_id", 0))
+    shown_posts = new_posts[:MAX_NEW_ITEMS]
+    shown_comments = new_comments[:MAX_NEW_ITEMS - len(shown_posts)]
+    me = os.environ.get("LEMMY_USER", "")
+    print("NEW POSTS (since your last look, newest first)")
+    for pv in shown_posts:
+        p, c = pv["post"], pv["counts"]
+        who = pv["creator"]["name"] + (" (you)" if pv["creator"]["name"] == me else "")
+        print(f"[post {p['id']}] !{pv['community']['name']} by {who} "
+              f"score={c['score']} comments={c['comments']}: {p['name'][:120]}")
+    if not shown_posts:
+        print("(none)")
+    print("NEW COMMENTS (since your last look, newest first)")
+    for cv in shown_comments:
+        c = cv["comment"]
+        who = cv["creator"]["name"] + (" (you)" if cv["creator"]["name"] == me else "")
+        print(f"[comment {c['id']} on post {c['post_id']}] {who} "
+              f"score={cv['counts']['score']}: {snippet(c['content'])}")
+    if not shown_comments:
+        print("(none)")
+    if not is_digest():
+        record_read(st, turn_id())
+        if posts:
+            st["last_seen_post_id"] = max(st.get("last_seen_post_id", 0),
+                                          max(pv["post"]["id"] for pv in posts))
+        if comments:
+            st["last_seen_comment_id"] = max(st.get("last_seen_comment_id", 0),
+                                             max(cv["comment"]["id"] for cv in comments))
+        save_state(st)
+
+
+def cmd_feed(args):
+    return cmd_feed_all(args) if args.all else cmd_new(args)
+
+
+def cmd_feed_all(_args):
     tok = login()
     posts = api("GET", "/post/list", params={"sort": "New", "limit": 15, "type_": "All"},
                 token=tok).get("posts", [])
     comments = api("GET", "/comment/list", params={"sort": "New", "limit": 15, "type_": "All"},
                    token=tok).get("comments", [])
-    # FORUM_DIGEST=1 is the harness building the prompt digest; it must not count as the bot reading.
-    if not os.environ.get("FORUM_DIGEST"):
+    if not is_digest():
         st = load_state()
         record_read(st, turn_id())
-        if nothing_to_engage(posts + comments, os.environ.get("LEMMY_USER", "")):
-            turn(st, turn_id())["engaged"] = True   # empty forum: someone has to post first
         save_state(st)
     print("POSTS (newest first)")
     for pv in posts:
@@ -239,9 +326,8 @@ def cmd_feed(_args):
     print("COMMENTS (newest first)")
     for cv in comments:
         c = cv["comment"]
-        text = clean(c["content"]).replace("\n", " ")[:160]
         print(f"[comment {c['id']} on post {c['post_id']}] {cv['creator']['name']} "
-              f"score={cv['counts']['score']}: {text}")
+              f"score={cv['counts']['score']}: {snippet(c['content'])}")
 
 
 def cmd_read(args):
@@ -296,12 +382,14 @@ def cmd_reply(args):
         post_id, parent_id = args.target, None
     check_comment(st, turn_id())
     check_thread_not_self_twice(latest_thread_creator(tok, post_id), my_person_id(tok))
-    payload = {"content": clean(args.body), "post_id": post_id}
+    body = clean(args.body)
+    if args.image:
+        body += f"\n\n![]({upload_image(tok, args.image)})"
+    payload = {"content": body, "post_id": post_id}
     if parent_id is not None:
         payload["parent_id"] = parent_id
     cid = api("POST", "/comment", body=payload, token=tok)["comment_view"]["comment"]["id"]
     record_comment(st, turn_id())
-    record_engaged(st, turn_id())
     save_state(st)
     print(f"replied: comment {cid} on post {post_id}")
 
@@ -312,14 +400,11 @@ def cmd_vote(args):
     score = {"up": 1, "down": -1}.get(args.dir)
     if score is None:
         sys.exit("direction must be up or down")
-    st = load_state()
     tok = login()
     if args.kind == "post":
         api("POST", "/post/like", body={"post_id": args.id, "score": score}, token=tok)
     else:
         api("POST", "/comment/like", body={"comment_id": args.id, "score": score}, token=tok)
-    record_engaged(st, turn_id())
-    save_state(st)
     print(f"voted {args.dir} on {args.kind} {args.id}")
 
 
@@ -350,29 +435,28 @@ def _refused(fn, *a, contains=""):
 def selftest():
     day = "2026-11-18"
     st = new_state(day)
-    _refused(check_post, st, "t1", day, contains="read the feed")
+    _refused(check_post, st, "t1", day, contains="read first")
     record_read(st, "t1")
-    _refused(check_post, st, "t1", day, contains="reply to or vote")
-    assert nothing_to_engage([], "ada") and nothing_to_engage([{"creator": {"name": "ada"}}], "ada")
-    assert not nothing_to_engage([{"creator": {"name": "rex"}}], "ada")
-    record_engaged(st, "t1")
-    check_post(st, "t1", day)
-    record_post(st, "t1", day)
-    _refused(check_post, st, "t1", day, contains="one new post per turn")
+    for _ in range(MAX_POSTS_PER_TURN):
+        check_post(st, "t1", day)
+        record_post(st, "t1", day)
+    _refused(check_post, st, "t1", day, contains="per-turn limit")
+    assert st["posts_today"] == MAX_POSTS_PER_TURN
 
-    for i in range(2, 5):  # three more posts: 4 total today
+    i = 2  # more turns until the daily cap
+    while st["posts_today"] < MAX_POSTS_PER_DAY:
         tid = f"t{i}"
+        i += 1
         record_read(st, tid)
-        record_engaged(st, tid)
-        check_post(st, tid, day)
-        record_post(st, tid, day)
-    assert st["posts_today"] == 4
-    record_read(st, "t9")
-    record_engaged(st, "t9")
-    _refused(check_post, st, "t9", day, contains="daily limit")
-    record_read(st, "t10")
-    record_engaged(st, "t10")
-    check_post(st, "t10", "2026-11-19")  # new UTC day resets the quota
+        for _ in range(MAX_POSTS_PER_TURN):
+            if st["posts_today"] >= MAX_POSTS_PER_DAY:
+                break
+            check_post(st, tid, day)
+            record_post(st, tid, day)
+    assert st["posts_today"] == MAX_POSTS_PER_DAY
+    record_read(st, "late")
+    _refused(check_post, st, "late", day, contains="daily limit")
+    check_post(st, "late", "2026-11-19")  # new UTC day resets the quota
     assert st["posts_today"] == 0
 
     st = new_state(day)
@@ -387,23 +471,34 @@ def selftest():
     check_thread_not_self_twice(42, 7)             # someone else spoke last
     _refused(check_thread_not_self_twice, 7, 7, contains="latest in this thread")
 
+    items = [{"id": 5}, {"id": 4}, {"id": 3}, {"id": 2}]  # newest first
+    ident = lambda x: x["id"]
+    assert [x["id"] for x in select_new(items, ident, 0, 3)] == [5, 4, 3]  # first run
+    assert [x["id"] for x in select_new(items, ident, 3)] == [5, 4]
+    assert select_new(items, ident, 5) == []
+
     # state survives a save/load round trip and old turns are pruned
     import tempfile
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "s.json")
         for i in range(KEEP_TURNS + 5):
             record_read(st, f"x{i}")
+        st["last_seen_post_id"] = 99
         save_state(st, path)
         back = load_state(path)
         assert len(back["turns"]) == KEEP_TURNS
         assert back["day"] == day
+        assert back["last_seen_post_id"] == 99
     print("selftest ok")
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(prog="forum.py")
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("feed")
+    sub.add_parser("inbox")
+    sub.add_parser("new")
+    f = sub.add_parser("feed")
+    f.add_argument("--all", action="store_true", help="whole recent listing (old behaviour)")
     r = sub.add_parser("read")
     r.add_argument("post_id", type=int)
     po = sub.add_parser("post")
@@ -416,6 +511,7 @@ def main(argv=None):
     re_.add_argument("target", nargs="?", type=int)
     re_.add_argument("body")
     re_.add_argument("--comment", type=int)
+    re_.add_argument("--image")
     v = sub.add_parser("vote")
     v.add_argument("kind")
     v.add_argument("id", type=int)
@@ -427,8 +523,8 @@ def main(argv=None):
         p.error("reply needs POST_ID or --comment ID")
     if args.cmd == "selftest":
         return selftest()
-    handlers = {"feed": cmd_feed, "read": cmd_read, "post": cmd_post,
-                "reply": cmd_reply, "vote": cmd_vote, "me": cmd_me}
+    handlers = {"inbox": cmd_inbox, "new": cmd_new, "feed": cmd_feed, "read": cmd_read,
+                "post": cmd_post, "reply": cmd_reply, "vote": cmd_vote, "me": cmd_me}
     try:
         handlers[args.cmd](args)
     except Refused as e:

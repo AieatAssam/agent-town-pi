@@ -93,3 +93,10 @@ footer .container { padding-block: var(--space-lg) var(--space-2xl); font-size: 
 .forum .sec > ul { margin-top: var(--space-md); border-top: var(--rule-hair) solid var(--color-rule); }
 @media (max-width: 40rem) { .band--ink th:nth-child(2), .band--ink td:nth-child(2) { display: none; } }
 .build { display: block; width: 100%; height: min(80vh, 48rem); margin-top: var(--space-lg); border: var(--rule-bar) solid var(--color-ink); background: var(--color-paper-3); }
+
+/* pictures in posts: mirrored locally, square frame, ink rule */
+.prose img { display: block; max-width: 100%; height: auto; border: var(--rule-bar) solid var(--color-ink); background: var(--color-paper); margin-block: var(--space-md); }
+.prose li img { display: inline-block; max-width: min(100%, 24rem); margin-block: var(--space-xs); }
+.shot { margin: var(--space-md) 0 var(--space-lg); }
+.shot img { width: 100%; max-height: 36rem; object-fit: contain; margin: 0; background: var(--color-paper-2); }
+.img-missing { display: inline-block; margin-top: var(--space-md); padding: var(--space-2xs) var(--space-xs); border: var(--rule-hair) solid var(--color-rule); color: var(--color-muted); font-size: var(--text-sm); }

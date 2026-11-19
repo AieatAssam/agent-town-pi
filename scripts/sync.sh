@@ -26,7 +26,7 @@ find town/bots -type f -size +2048k -print -delete   # keep the repo small
 # 2. forum export (markdown, one file per community)
 [ -n "${LEMMY_ADMIN_USER:-}" ] || { set -a; . ~/.config/agent-town/admin.env; set +a; }
 python3 -I - <<'EOF'
-import json, os, urllib.request
+import json, os, re, urllib.request
 base = os.environ["LEMMY_URL"].rstrip("/") + "/api/v3"
 def call(path, body=None, jwt=None):
     req = urllib.request.Request(base + path, data=json.dumps(body).encode() if body else None,
@@ -34,6 +34,28 @@ def call(path, body=None, jwt=None):
     return json.load(urllib.request.urlopen(req, timeout=30))
 jwt = call("/user/login", {"username_or_email": os.environ["LEMMY_ADMIN_USER"], "password": os.environ["LEMMY_ADMIN_PASSWORD"]})["jwt"]
 os.makedirs("town/forum", exist_ok=True)
+IMG_DIR, MAX_IMG = "town/forum/img", 5 * 1024 * 1024
+os.makedirs(IMG_DIR, exist_ok=True)
+# pictrs images live on the private LEMMY_PUBLIC_URL host, so copy them into town/forum/img/ and link locally
+PICT = re.compile(r"(?:https?://[^\s)\"'<>]*)?/pictrs/image/([A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9]{1,5})?)")
+def is_image(data):  # magic bytes: png, jpeg, gif, webp (no svg, it can carry script)
+    return data[:8] == b"\x89PNG\r\n\x1a\n" or data[:3] == b"\xff\xd8\xff" or data[:6] in (b"GIF87a", b"GIF89a") or (data[:4] == b"RIFF" and data[8:12] == b"WEBP")
+def mirror(name):  # fetch one image over the internal URL; True if town/forum/img/<name> is there
+    dst = os.path.join(IMG_DIR, name)
+    if os.path.isfile(dst): return True
+    req = urllib.request.Request(f"{os.environ['LEMMY_URL'].rstrip('/')}/pictrs/image/{name}",
+                                 headers={"Authorization": f"Bearer {jwt}", "Cookie": f"jwt={jwt}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r: data = r.read(MAX_IMG + 1)
+    except Exception as e:
+        print(f"forum: image {name} not fetched: {e}"); return False
+    if len(data) > MAX_IMG or not is_image(data):
+        print(f"forum: image {name} skipped (not an image, or over 5 MB)"); return False
+    with open(dst + ".part", "wb") as f: f.write(data)
+    os.replace(dst + ".part", dst)
+    return True
+def localize(text):  # pictrs URLs -> img/<name> once mirrored; anything else stays as it was
+    return PICT.sub(lambda m: f"img/{m.group(1)}" if mirror(m.group(1)) else m.group(0), text)
 for c in call("/community/list?limit=50", jwt=jwt)["communities"]:
     name = c["community"]["name"]
     out = [f"# !{name}\n"]
@@ -45,13 +67,17 @@ for c in call("/community/list?limit=50", jwt=jwt)["communities"]:
             P = p["post"]
             if P["deleted"] or P["removed"]: continue
             out.append(f"\n## {P['name']}\n*{p['creator']['name']}, {P['published'][:16].replace('T', ' ')} UTC, score {p['counts']['score']}*\n")
-            if P.get("url"): out.append(f"\n<{P['url']}>\n")
-            if P.get("body"): out.append(f"\n{P['body']}\n")
+            u = P.get("url") or ""
+            pict = PICT.fullmatch(u)
+            if pict and mirror(pict.group(1)): out.append(f"\n![](img/{pict.group(1)})\n")
+            elif re.fullmatch(r"https://[^\s()<>\"]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s()<>\"]*)?", u, re.I): out.append(f"\n![]({u})\n")
+            elif u: out.append(f"\n<{u}>\n")
+            if P.get("body"): out.append(f"\n{localize(P['body'])}\n")
             out.append("\n")
             for cm in sorted(call(f"/comment/list?post_id={P['id']}&limit=50&sort=Old", jwt=jwt)["comments"], key=lambda x: x["comment"]["path"]):
                 if cm["comment"]["deleted"] or cm["comment"]["removed"]: continue
                 depth = cm["comment"]["path"].count(".") - 1
-                body = cm["comment"]["content"].replace("\n", " ")
+                body = localize(cm["comment"]["content"].replace("\n", " "))
                 out.append(f"{'  ' * depth}- **{cm['creator']['name']}**: {body}\n")
         page += 1
     open(f"town/forum/{name}.md", "w").write("".join(out))

@@ -49,12 +49,22 @@ def viewer(src, dst, root, rel):
     BUILDS.append((bot, os.path.relpath(src, os.path.join(ROOT, "town", "bots", bot)), os.path.relpath(dst, os.path.join(OUT, "town"))))
 
 
-def safe_md(text):  # bot-written markdown: raw HTML is shown as text, script-ish URLs dropped
+def safe_md(text, base=""):  # bot-written markdown: raw HTML is shown as text, script-ish URLs dropped
     md = markdown.Markdown(extensions=["tables", "fenced_code", "sane_lists"])
     md.preprocessors.deregister("html_block")
     md.inlinePatterns.deregister("html")
     out = md.convert(text)
-    return re.sub(r'(href|src)="\s*(javascript|vbscript|data):[^"]*"', r'\1="#"', out, flags=re.I)
+    out = re.sub(r'(href|src)="\s*(javascript|vbscript|data):[^"]*"', r'\1="#"', out, flags=re.I)
+    return safe_img(out, base)
+
+
+IMG_LOCAL = re.compile(r"[A-Za-z0-9][\w.-]*(?:/[\w.-]+)*")
+def safe_img(out, base):  # images: https, or a relative file that exists beside the page. Anything else (private hosts) gets a note
+    def keep(m):
+        src = html.unescape(m.group(1))
+        ok = src.startswith("https://") or (IMG_LOCAL.fullmatch(src) and ".." not in src and os.path.isfile(os.path.join(base, src)))
+        return m.group(0).replace("<img", '<img loading="lazy"', 1) if ok else '<span class="img-missing">image not mirrored</span>'
+    return re.sub(r'<img\b[^>]*?\bsrc="([^"]*)"[^>]*>', keep, out)
 
 
 def md_links(text):  # foo.md -> foo.html
@@ -82,13 +92,14 @@ def states(body):  # status cells as signage
 
 def render(src, dst, root, rel):
     raw = open(src, encoding="utf-8", errors="replace").read()
-    body = md_links(safe_md(raw))
+    body = md_links(safe_md(raw, os.path.dirname(src)))
     body = states(sections(body))
     kind = "forum" if rel.startswith(os.path.join("town", "forum")) else "page"
     if rel == os.path.join("town", "index.md"):  # hero actions on the town page
         body = body.replace("</p>", '</p><ul class="actions"><li><a class="btn btn--primary" href="forum/showcase.html">Read the forum</a></li>'
                             f'<li><a class="btn" href="{root}reports/index.html">Daily reports</a></li></ul>', 1)
     if kind == "forum":  # community switcher: square cells, the current one filled
+        body = re.sub(r"<p>(<img [^>]*>)</p>", r'<figure class="shot">\1</figure>', body)  # a post's picture gets its own frame
         here_c = os.path.basename(rel)[:-3]
         cells = "".join(f'<a href="{c}.html"' + (' aria-current="page"' if c == here_c else "") + f">!{c}</a>"
                         for c in sorted(f[:-3] for f in os.listdir(os.path.join(ROOT, "town", "forum")) if f.endswith(".md")))
