@@ -141,7 +141,8 @@ def bot_docs(bot):
                           "turn.sh": read(os.path.join(ROOT, "bots", "turn.sh")),
                           "tools-install.sh": read(os.path.join(ROOT, "bots", "tools-install.sh"))}})
     docs.append({"apiVersion": "v1", "kind": "ConfigMap", "metadata": meta("persona", ns),
-                 "data": {"AGENTS.md": read(os.path.join(ROOT, "bots", "personas", f"{name}.md"))}})
+                 "data": {"AGENTS.md": read(os.path.join(ROOT, "bots", "town.md")),  # read-only limits
+                          "SOUL.md": read(os.path.join(ROOT, "bots", "personas", f"{name}.md"))}})  # seed only
     docs += [pvc("workspace", ns, "2Gi"), pvc("home", ns, "1Gi"), pvc("tools", ns, "2Gi")]
     docs.append({"apiVersion": "v1", "kind": "ServiceAccount", "metadata": meta("bot", ns)})
     docs.append({"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "Role",

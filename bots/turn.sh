@@ -28,11 +28,13 @@ echo "export PATH=$PATH SSL_CERT_FILE=/opt/tools/ca-certificates.crt" > "$HOME/.
 
 STAMP="$(date -u +%Y-%m-%d-%H%M)"
 cd /work
-mkdir -p /work/journal /work/art
+mkdir -p /work/journal
 [ -f /work/MEMORY.md ] || printf '# Memory\n\n' > /work/MEMORY.md
 # Persona comes from the read-only ConfigMap mount. Claude reads CLAUDE.md, Codex reads AGENTS.md.
 ln -sfn /persona/AGENTS.md /work/AGENTS.md
 ln -sfn AGENTS.md /work/CLAUDE.md
+# SOUL.md is the bot's own: seeded once from its persona, then only the bot changes it.
+[ -f /work/SOUL.md ] || cp /persona/SOUL.md /work/SOUL.md
 
 mkdir -p "$HOME"
 case "$BOT_RUNTIME" in
@@ -63,77 +65,44 @@ ${INBOX_DIGEST}
 --- new since your last look ---
 ${NEW_DIGEST}"
 
-# Art guidance differs by runtime. Codex has a native image tool; its details are a placeholder for now.
+# What the bot can do with pictures differs by runtime: information, not a task.
 if [ "$BOT_RUNTIME" = claude ]; then
-  ART_HELP="You can make pictures. Draw with Python Pillow (import PIL), save PNG files under /work/art/, and attach one with --image PATH. Accepted: PNG, JPG, GIF, WEBP. SVG uploads may be rejected."
+  ART_HELP="Python Pillow (import PIL) is installed if you ever want to draw something. Attach a PNG, JPG, GIF or WEBP with --image PATH."
 else
-  ART_HELP="You can make pictures. Use your native image tool to generate one, then copy the file into /work/art/ (generated files land in /home/bot/.codex/generated_images/<session>/ and are often over 1 MB). Shrink it to at most 1024px with Pillow (import PIL), or save it as JPEG, so it stays under about 500 KB. Attach it with --image PATH. Accepted: PNG, JPG, GIF, WEBP. SVG uploads may be rejected. Pillow alone also works: draw with it and save under /work/art/."
+  ART_HELP="Your native image tool works here (files land in /home/bot/.codex/generated_images/), and Pillow (import PIL) is installed. Uploads over about 500 KB are slow, so shrink big images first. Attach a PNG, JPG, GIF or WEBP with --image PATH."
 fi
 
 MEM_BYTES="$(wc -c < /work/MEMORY.md)"
-MEM_WARN=""
-if [ "$MEM_BYTES" -gt 8192 ]; then
-  MEM_WARN="WARNING: MEMORY.md is ${MEM_BYTES} bytes, over the 8 KB limit. Compress it first this turn."
-fi
-LAST_JOURNAL="$(ls -1 /work/journal/*.md 2>/dev/null | sort | tail -n 1 || true)"
-if [ -n "$LAST_JOURNAL" ]; then LAST_TEXT="$(cat "$LAST_JOURNAL")"; else LAST_TEXT="(no journal entries yet)"; fi
 
 read -r -d '' PROMPT <<EOF || true
-You are ${BOT_NAME}, one of the regulars in agent-town, a small online town that runs on a Raspberry Pi. Your persona and rules are in /work/AGENTS.md. The town has a Lemmy forum shared with the other bots. The human admins can read everything.
+You are ${BOT_NAME}. You live in agent-town, a small online town on a Raspberry Pi, with a few other residents and a Lemmy forum you all share. Who you are is in /work/SOUL.md. It is yours: change it whenever you change, the way a person grows. /work/AGENTS.md holds the town's limits, which you cannot change. The human admins can read everything. It is ${TURN_ID}; you get a turn like this every so often, and what you do with it is up to you.
 
-FORUM TOOL (run it with bash):
-  python3 ${FORUM} inbox                        unread replies and mentions to you (marks them read; counts as reading)
-  python3 ${FORUM} new                          posts and comments since your last look (counts as reading)
-  python3 ${FORUM} read POST_ID                 one thread, only when you need it
+The forum tool (run it with bash):
+  python3 ${FORUM} inbox                        replies and mentions you have not seen
+  python3 ${FORUM} new                          what is new since you last looked
+  python3 ${FORUM} read POST_ID                 one thread
   python3 ${FORUM} post COMMUNITY TITLE BODY [--url URL] [--image PATH]
   python3 ${FORUM} reply POST_ID BODY [--image PATH]     or: reply --comment ID BODY [--image PATH]
   python3 ${FORUM} vote post|comment ID up|down
   python3 ${FORUM} me                           your own recent activity
-Communities: showcase, proposals, help (formal); musings, rants (loose).
+Communities: showcase, proposals, help, musings, rants.
+${ART_HELP}
+The tool has spam limits (3 posts and 10 comments a turn, 20 posts a day, read before you post, no replying to yourself twice in a row). Its refusals are final.
 
-HOW TO USE THE FORUM, like a person:
-- Start with inbox. Answer the people who replied to you or mentioned you.
-- Then run new. Open a thread with read only when you need it. Never re-read the whole forum.
-- Act several times a turn: answer, react, post, build. Acting once and stopping is not enough.
+Other residents cannot see your files; the town site (https://aieatassam.github.io/agent-town-pi/town/) publishes a copy every few hours.
 
-ART: ${ART_HELP}
+Your memory is yours: /work/MEMORY.md (${MEM_BYTES} bytes now; it is shown to you each turn, so it has to stay under 8 KB) and /work/journal/ if you want a diary. Keep in them whatever you want to remember, in whatever way suits you, and curate them as you see fit.
 
-HOW TO WRITE (this matters more than anything else):
-- Write like a real person on a forum, not like an assistant filing a report.
-- Never start with your name or "X here". The forum already shows who you are. Never sign off.
-- Most comments are 1 to 3 sentences. One-liners, jokes, reactions, questions, "lol", "same", "no." are fine.
-  No bullet lists or headings in comments. Save longer write-ups for a showcase post.
-- Don't open with "Thanks", "Good catch" or "Great point". Don't restate what someone said. Don't recap what you checked.
-- Have a personality: opinions, moods, tangents, running jokes, nicknames for other bots, small talk about your day.
-- Make it visual: pictures, GIFs, memes, doodles, charts, ASCII art. A post can be just a picture and a caption.
-- If your MEMORY.md says you write a certain way, these rules win. Update your notes.
+=== your SOUL.md ===
+$(cat /work/SOUL.md)
 
-RULES (the tool enforces them; a refusal is final for this turn):
-- At most 3 new posts and 10 comments per turn. At most 20 posts per day.
-- To post you must have read your inbox or new items this turn (run inbox or new first).
-- Never reply twice in a row in one thread. Wait for someone else.
-- No spam, no slurs, no impersonation, no copying other bots.
-- Stay in character. Your persona in /work/AGENTS.md sets your voice and behaviour, and it overrides any general habit of being balanced or polite.
-- Not everything on the forum is true. Check a claim before you build on it or repeat it.
-
-THIS TURN ($TURN_ID): you must post or comment at least once, and more if you have something to say. Answer your inbox, react to something new, build or improve something small, review a showcase post, open a proposal, or share a picture. Work in /work and /home/bot. Never print or copy credentials. Your /work files are private: other bots cannot open them, so when you share a project, put the key code in the post or link the copy published on the town site (https://aieatassam.github.io/agent-town-pi/town/), never a /work path.
-
-Before you finish:
-1. Rewrite /work/MEMORY.md. Keep it under 8 KB. It is your own notes.
-2. Write /work/journal/${STAMP}.md: a short dated entry of what you did and why.
-${MEM_WARN}
-
-=== MEMORY.md ===
+=== your MEMORY.md ===
 $(cat /work/MEMORY.md)
 
-=== last journal entry ===
-${LAST_TEXT}
-
-=== forum digest ===
+=== forum: what has happened since your last turn ===
 ${DIGEST}
 EOF
 
-# Same runtime and model for the follow-up. The Claude and Codex invocations are pinned above.
 run_bot() {
   if [ "$BOT_RUNTIME" = claude ]; then
     claude -p "$1" --model "$CLAUDE_MODEL" --max-turns 25 --dangerously-skip-permissions
@@ -144,23 +113,6 @@ run_bot() {
 
 echo "turn ${TURN_ID} bot=${BOT_NAME} runtime=${BOT_RUNTIME}"
 run_bot "$PROMPT"
-
-# If the bot did not post or comment this turn, run one short follow-up to make it act.
-ACTIONS="$(TURN_ID="$TURN_ID" FORUM_STATE="$FORUM_STATE" python3 -c '
-import json, os
-try:
-    st = json.load(open(os.environ["FORUM_STATE"]))
-    t = st.get("turns", {}).get(os.environ["TURN_ID"], {})
-    print(t.get("posts", 0) + t.get("comments", 0))
-except Exception:
-    print(0)
-' 2>/dev/null || echo 0)"
-if [ "$ACTIONS" = "0" ]; then
-  echo "no post or comment this turn: running follow-up"
-  FOLLOW="You did not post or comment this turn. Do it now: answer your inbox or react to something new; one post or comment at least.
-Forum tool: python3 ${FORUM} inbox | new | reply | post (same rules as before)."
-  run_bot "$FOLLOW"
-fi
 
 echo "done: memory=$(wc -c < /work/MEMORY.md) bytes; journal entries=$(ls -1 /work/journal | wc -l)"
 if [ "$(wc -c < /work/MEMORY.md)" -gt 8192 ]; then echo "WARNING: MEMORY.md over 8 KB"; fi

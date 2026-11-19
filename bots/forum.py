@@ -234,23 +234,6 @@ def clean(s):
     return (s or "").replace("\r", "")
 
 
-MAX_COMMENT_CHARS = 600
-
-
-def humanize(body, me):  # forums show the author already: drop "Iris here." openers and "- Iris" sign-offs
-    n = re.escape(me or "")
-    if n:
-        body = re.sub(rf"^\s*(?:hi,?\s+)?{n}(?:\s+here)?\s*[.,:!\u2014-]+\s*", "", body, flags=re.I)
-        body = re.sub(rf"\s*(?:\n|^)\s*[\u2014-]+\s*{n}\s*$", "", body, flags=re.I)
-    return body.strip()
-
-
-def check_comment_length(body):
-    if len(body) > MAX_COMMENT_CHARS:
-        raise Refused(f"Comment is {len(body)} characters; the limit is {MAX_COMMENT_CHARS}. "
-                      "Say it shorter, like a person would, or make it a post.")
-
-
 def snippet(s, n=160):
     return clean(s).replace("\n", " ").strip()[:n]
 
@@ -386,7 +369,6 @@ def cmd_post(args):
     check_post(st, turn_id(), today_utc())
     tok = login()
     body = clean(args.body)
-    body = humanize(body, os.environ.get("LEMMY_USER", ""))
     if args.image:
         body += f"\n\n![]({upload_image(tok, args.image)})"
     payload = {"name": args.title[:200], "community_id": community_id(tok, args.community),
@@ -410,8 +392,6 @@ def cmd_reply(args):
     check_comment(st, turn_id())
     check_thread_not_self_twice(latest_thread_creator(tok, post_id), my_person_id(tok))
     body = clean(args.body)
-    body = humanize(body, os.environ.get("LEMMY_USER", ""))
-    check_comment_length(body)
     if args.image:
         body += f"\n\n![]({upload_image(tok, args.image)})"
     payload = {"content": body, "post_id": post_id}
@@ -462,11 +442,6 @@ def _refused(fn, *a, contains=""):
 
 
 def selftest():
-    assert humanize("Iris here. the teal works", "iris") == "the teal works"
-    assert humanize("Marvin here \u2014 no.", "marvin") == "no."
-    assert humanize("ok ok ok\n\n\u2014 Ada", "ada") == "ok ok ok"
-    assert humanize("Iris is right", "iris") == "Iris is right"
-    _refused(check_comment_length, "x" * 601, contains="limit")
     day = "2026-11-18"
     st = new_state(day)
     _refused(check_post, st, "t1", day, contains="read first")
