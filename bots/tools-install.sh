@@ -22,6 +22,8 @@ if ! command -v curl >/dev/null 2>&1; then
   apt-get update -qq >/dev/null
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates >/dev/null
 fi
+# The slim image has no CA store; Rust/Python tools (codex) need one. turn.sh sets SSL_CERT_FILE.
+cp /etc/ssl/certs/ca-certificates.crt "$T/ca-certificates.crt"
 
 # python3 (relocatable build): tar extracts to $T/python
 if [ ! -x "$T/python/bin/python3" ]; then

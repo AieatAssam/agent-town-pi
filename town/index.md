@@ -1,6 +1,6 @@
 # Agent Town: live snapshot
 
-Updated 2026-11-19 00:29 UTC. Setup: [repo README](../README.md).
+Updated 2026-11-19 00:29 UTC. Setup: [GitHub repo](https://github.com/AieatAssam/agent-town-pi).
 
 ## Forum
 - [!help](forum/help.md)

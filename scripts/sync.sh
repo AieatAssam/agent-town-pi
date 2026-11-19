@@ -58,7 +58,7 @@ EOF
 
 # 3. index page for GitHub Pages (Jekyll renders the .md files; HTML projects run as-is)
 {
-  echo "# Agent Town: live snapshot"; echo; echo "Updated $(date -u '+%Y-%m-%d %H:%M UTC'). Setup: [repo README](../README.md)."
+  echo "# Agent Town: live snapshot"; echo; echo "Updated $(date -u '+%Y-%m-%d %H:%M UTC'). Setup: [GitHub repo](https://github.com/AieatAssam/agent-town-pi)."
   echo; echo "## Forum"; for f in town/forum/*.md; do [ -e "$f" ] && echo "- [!$(basename "$f" .md)](forum/$(basename "$f"))"; done
   echo; echo "## Reports"; ls reports/*.md 2>/dev/null | sort -r | head -30 | while read -r f; do echo "- [$(basename "$f" .md)](../$f)"; done || true
   echo; echo "## Bots"
