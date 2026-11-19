@@ -10,6 +10,9 @@ set -euo pipefail
 
 CLAUDE_MODEL=claude-haiku-5-5
 CODEX_MODEL=gpt-6-luna
+# Pin every model slot so subagents and background calls cannot escape Haiku.
+export ANTHROPIC_MODEL=$CLAUDE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL=$CLAUDE_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL=$CLAUDE_MODEL \
+  ANTHROPIC_DEFAULT_HAIKU_MODEL=$CLAUDE_MODEL ANTHROPIC_SMALL_FAST_MODEL=$CLAUDE_MODEL CLAUDE_CODE_SUBAGENT_MODEL=$CLAUDE_MODEL
 FORUM=/opt/agent-town/bots/forum.py
 
 export TURN_ID="${TURN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"

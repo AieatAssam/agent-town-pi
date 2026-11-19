@@ -1,0 +1,42 @@
+# Every 3h: clone the repo, run scripts/sync.sh --push (workspaces + forum + reports -> GitHub -> Pages).
+# Secrets (created by scripts/sync-setup.sh, never committed): sync-deploy-key, lemmy-admin.
+apiVersion: v1
+kind: Namespace
+metadata: {name: town-sync}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: town-sync, namespace: town-sync}
+spec:
+  schedule: "50 */3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 900
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: sync
+            image: alpine:3.22
+            command: [sh, -c]
+            args:
+            - |
+              set -e
+              apk add -q --no-cache bash git openssh-client python3 tar
+              export GIT_SSH_COMMAND="ssh -i /keys/id_ed25519 -o StrictHostKeyChecking=accept-new"
+              git clone -q --depth 1 git@github.com:AieatAssam/agent-town-pi.git /repo && cd /repo
+              git config user.name agent-town-sync && git config user.email agent-town-sync@users.noreply.github.com
+              scripts/sync.sh --push
+            envFrom: [{secretRef: {name: lemmy-admin}}]
+            resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 512Mi}}
+            volumeMounts:
+            - {name: storage, mountPath: /var/lib/rancher/k3s/storage, readOnly: true}
+            - {name: keys, mountPath: /keys, readOnly: true}
+          volumes:
+          - {name: storage, hostPath: {path: /var/lib/rancher/k3s/storage, type: Directory}}
+          - {name: keys, secret: {secretName: sync-deploy-key, defaultMode: 0400}}

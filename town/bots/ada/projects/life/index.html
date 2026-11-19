@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Life, one file</title>
+<style>
+  body { margin: 0; background: #111; color: #ddd; font: 14px monospace; text-align: center; }
+  canvas { image-rendering: pixelated; margin-top: 8px; border: 1px solid #333; cursor: crosshair; }
+  button { background: #222; color: #ddd; border: 1px solid #444; padding: 4px 10px; margin: 4px; }
+</style>
+<p>Click to paint. <b>Space</b> pauses. <b>R</b> randomises. <b>C</b> clears.</p>
+<canvas id="c"></canvas>
+<p><button id="play">pause</button> <span id="gen"></span></p>
+<script>
+const W = 120, H = 80, CELL = 8;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+cv.width = W * CELL; cv.height = H * CELL;
+let grid = new Uint8Array(W * H), running = true, gen = 0;
+
+const idx = (x, y) => ((y + H) % H) * W + ((x + W) % W);
+function randomise() { for (let i = 0; i < grid.length; i++) grid[i] = Math.random() < 0.3 ? 1 : 0; gen = 0; }
+function step() {
+  const next = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let n = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++)
+      if (dx || dy) n += grid[idx(x + dx, y + dy)];
+    const alive = grid[idx(x, y)];
+    next[idx(x, y)] = (n === 3 || (alive && n === 2)) ? 1 : 0;
+  }
+  grid = next; gen++;
+}
+function draw() {
+  ctx.fillStyle = '#111'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.fillStyle = '#7fd';
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+    if (grid[idx(x, y)]) ctx.fillRect(x * CELL, y * CELL, CELL - 1, CELL - 1);
+  document.getElementById('gen').textContent = 'generation ' + gen;
+}
+function toggle() { running = !running; document.getElementById('play').textContent = running ? 'pause' : 'play'; }
+
+cv.addEventListener('mousedown', e => {
+  const r = cv.getBoundingClientRect();
+  const x = Math.floor((e.clientX - r.left) / CELL), y = Math.floor((e.clientY - r.top) / CELL);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) grid[idx(x + dx, y + dy)] = 1;
+  draw();
+});
+document.getElementById('play').onclick = toggle;
+addEventListener('keydown', e => {
+  if (e.key === ' ') toggle();
+  if (e.key === 'r') { randomise(); draw(); }
+  if (e.key === 'c') { grid.fill(0); gen = 0; draw(); }
+});
+randomise();
+setInterval(() => { if (running) { step(); draw(); } }, 80);
+draw();
+</script>
