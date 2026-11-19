@@ -6,3 +6,4 @@ flash/secret/
 flash/settings.env
 settings.env
 k8s/bots/*.yaml
+_site/

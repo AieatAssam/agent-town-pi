@@ -3,7 +3,7 @@ name: pages
 on:
   push:
     branches: [main]
-    paths: ["town/**", "reports/**", ".github/workflows/pages.yml"]
+    paths: ["town/**", "reports/**", "site/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 permissions: {contents: read, pages: write, id-token: write}
 concurrency: {group: pages, cancel-in-progress: true}
@@ -12,13 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Assemble site
-        run: |
-          mkdir -p _src && cp -R town _src/town && mkdir -p reports && cp -R reports _src/reports
-          printf '<!doctype html><meta http-equiv="refresh" content="0; url=town/"><a href="town/">Agent Town</a>\n' > _src/index.html
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -q markdown && mkdir -p reports && python site/build.py _site
       - uses: actions/configure-pages@v5
-      - uses: actions/jekyll-build-pages@v1
-        with: {source: ./_src, destination: ./_site}
       - uses: actions/upload-pages-artifact@v3
   deploy:
     needs: build
