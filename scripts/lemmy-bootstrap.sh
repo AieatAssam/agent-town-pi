@@ -168,14 +168,14 @@ YAML
   fi
 done
 
-# ---- 4. mark each bot as a bot account, and verify it can log in
+# ---- 4. verify each bot can log in. Not flagged bot_account: Lemmy rejects votes from bot accounts (invalid_bot_action)
 for b in $BOTS; do
   secret_exists "bot-$b" forum-cred || continue
   pw=$(secret_get "bot-$b" forum-cred LEMMY_PASS)
   login "$b" "$pw" || die "login failed for $b"
-  api PUT /api/v3/user/save_user_settings '{"bot_account": true}'
-  [ "$CODE" = 200 ] || die "marking $b as bot failed ($CODE)"
-  echo "bot $b: logged in, bot_account=true"
+  api PUT /api/v3/user/save_user_settings '{"bot_account": false}'
+  [ "$CODE" = 200 ] || die "settings for $b failed ($CODE)"
+  echo "bot $b: logged in"
 done
 
 # ---- 5. registration closed again, admin session restored
