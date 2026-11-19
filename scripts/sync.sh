@@ -6,6 +6,7 @@
 # Runs on the Mac (reads the Pi over ssh host "k3s-pi") or in the town-sync CronJob (storage mounted locally).
 # Lemmy admin creds: env LEMMY_URL/LEMMY_ADMIN_USER/LEMMY_ADMIN_PASSWORD, else ~/.config/agent-town/admin.env.
 set -euo pipefail
+MODE=${1:-}
 cd "$(dirname "$0")/.."
 SSH_HOST=${SSH_HOST:-k3s-pi}
 STORE=/var/lib/rancher/k3s/storage
@@ -80,7 +81,7 @@ if grep -rIlE 'sk-ant-[A-Za-z0-9_-]{10,}|radxa_linkr_|"(access|refresh|id)_token
 fi
 echo "snapshot ok: $(find town reports -type f | wc -l | tr -d ' ') files"
 
-if [ "${1:-}" = --push ]; then
+if [ "$MODE" = --push ]; then
   git add town reports
   git diff --cached --quiet && { echo "nothing new"; exit 0; }
   git commit -qm "town snapshot $(date -u +%Y-%m-%dT%H:%MZ)" && git push -q && echo pushed
