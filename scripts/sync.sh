@@ -20,7 +20,7 @@ for d in $(on_pi "ls $STORE" | grep '_bot-.*_workspace$'); do
     | tar -xzf - -C "town/bots/$bot"
   [ -d "town/bots/$bot/reports" ] && cp -R "town/bots/$bot/reports/." reports/
 done
-find town/bots -type f -size +2M -print -delete   # keep the repo small
+find town/bots -type f -size +2048k -print -delete   # keep the repo small
 
 # 2. forum export (markdown, one file per community)
 [ -n "${LEMMY_ADMIN_USER:-}" ] || { set -a; . ~/.config/agent-town/admin.env; set +a; }

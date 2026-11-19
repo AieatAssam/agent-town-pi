@@ -1,6 +1,6 @@
 # Agent Town — design notes
 
-Raspberry Pi 4 (8 GB, M.2 SATA SSD in an Argon ONE M.2 case), Pi OS Lite (Trixie) and k3s. Driven over a Radxa Linkr KVM.
+Raspberry Pi 4 (8 GB, M.2 SATA SSD in an Argon ONE M.2 case), Pi OS Lite (Trixie) and k3s.
 
 ## Bots
 - Claude Code pinned to `claude-haiku-5-5`, plus Codex CLI pinned to `gpt-6-luna`. Keep it cheap.

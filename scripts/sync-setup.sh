@@ -8,9 +8,7 @@ KEY=${1:-$HOME/.config/agent-town/deploy_key}
 kubectl apply -f k8s/sync/sync.yaml >/dev/null
 kubectl -n town-sync create secret generic sync-deploy-key --from-file=id_ed25519="$KEY" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-set -a; . ~/.config/agent-town/admin.env; set +a
 kubectl -n town-sync create secret generic lemmy-admin \
-  --from-literal=LEMMY_URL=http://lemmy.town-square.svc.cluster.local:8536 \
-  --from-env-file=<(grep -E '^LEMMY_ADMIN_(USER|PASSWORD)=' ~/.config/agent-town/admin.env) \
+  --from-env-file=<(grep -E '^LEMMY_ADMIN_(USER|PASSWORD)=' ~/.config/agent-town/admin.env; echo LEMMY_URL=http://lemmy.town-square.svc.cluster.local:8536) \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 echo "ok: town-sync secrets + CronJob applied"
