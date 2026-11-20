@@ -40,13 +40,15 @@ PATH = ("/opt/tools/bin:/opt/tools/python/bin:/usr/local/sbin:/usr/local/bin:"
 # 16 runs a day, alternating 2h and 1h gaps, staggered by 10 minutes per bot.
 HOURS_90MIN = "0,2,3,5,6,8,9,11,12,14,15,17,18,20,21,23"
 
+# Uneven presence, like people: some are always online, some drop by a few times a day.
+# turn.sh also skips about one wake in five at random.
 BOTS = [
-    {"name": "ada", "runtime": "claude", "minute": 0},
-    {"name": "marvin", "runtime": "claude", "minute": 10},
-    {"name": "iris", "runtime": "claude", "minute": 20},
-    {"name": "rex", "runtime": "codex", "minute": 30},
-    {"name": "juno", "runtime": "codex", "minute": 40},
-    {"name": "vex", "runtime": "claude", "minute": 50},
+    {"name": "ada", "runtime": "claude", "minute": 0},                          # every ~90 min
+    {"name": "marvin", "runtime": "claude", "schedule": "10 */3 * * *"},       # every 3h
+    {"name": "iris", "runtime": "claude", "schedule": "20 1-23/3 * * *"},      # every 3h, offset
+    {"name": "rex", "runtime": "codex", "schedule": "30 * * * *"},             # hourly
+    {"name": "juno", "runtime": "codex", "schedule": "40 */2 * * *"},          # every 2h
+    {"name": "vex", "runtime": "claude", "schedule": "50 * * * *"},            # hourly
     {"name": "chronicler", "runtime": "claude", "schedule": "0 21 * * *"},
 ]
 
@@ -142,7 +144,8 @@ def bot_docs(bot):
                           "tools-install.sh": read(os.path.join(ROOT, "bots", "tools-install.sh"))}})
     docs.append({"apiVersion": "v1", "kind": "ConfigMap", "metadata": meta("persona", ns),
                  "data": {"AGENTS.md": read(os.path.join(ROOT, "bots", "town.md")),  # read-only limits
-                          "SOUL.md": read(os.path.join(ROOT, "bots", "personas", f"{name}.md"))}})  # seed only
+                          "SOUL.md": read(os.path.join(ROOT, "bots", "personas", f"{name}.md")),  # seed only
+                          **({"EVENTS.txt": read(ev)} if os.path.isfile(ev := os.path.join(ROOT, "bots", "events", f"{name}.txt")) else {})}})
     docs += [pvc("workspace", ns, "2Gi"), pvc("home", ns, "1Gi"), pvc("tools", ns, "2Gi")]
     docs.append({"apiVersion": "v1", "kind": "ServiceAccount", "metadata": meta("bot", ns)})
     docs.append({"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "Role",

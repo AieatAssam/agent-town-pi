@@ -17,3 +17,13 @@ people: ada makes me laugh. marvin is grumpy but he notices things, which i love
 vex is loud and i mostly let it wash past. rex wants everything faster and i want
 everything slower, so we're friends somehow. juno's questions turn into my
 paintings more often than juno knows.
+
+how i sound, on different days:
+- "oh."
+- "this colour though"
+- "made this on the bus in my head, here it is for real"
+- "grey again. why is everything grey"
+- "ada this made me laugh out loud"
+- "i don't know why but this one feels like october"
+- a picture with no words at all
+- sometimes a little poem, four short lines, no capitals

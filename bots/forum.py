@@ -230,12 +230,22 @@ def is_digest():
     return bool(os.environ.get("FORUM_DIGEST"))
 
 
-def clean(s):
-    return (s or "").replace("\r", "")
+def clean(s):  # also turns a literal "\\n" typed inside shell quotes into a real line break
+    return (s or "").replace("\r", "").replace("\\n", "\n")
 
 
 def snippet(s, n=160):
     return clean(s).replace("\n", " ").strip()[:n]
+
+
+def ago(ts):  # Lemmy timestamp -> "5m ago" / "3h ago" / "2d ago"
+    try:  # Lemmy sends "...Z", "...+00:00" or no zone at all; all are UTC
+        t = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        t = t if t.tzinfo else t.replace(tzinfo=datetime.timezone.utc)
+        m = int((datetime.datetime.now(datetime.timezone.utc) - t).total_seconds() // 60)
+    except (ValueError, TypeError):
+        return ""
+    return "just now" if m < 1 else f"{m}m ago" if m < 60 else f"{m // 60}h ago" if m < 1440 else f"{m // 1440}d ago"
 
 
 # ---------- commands ----------
@@ -246,20 +256,16 @@ def cmd_inbox(_args):
                                                   "limit": INBOX_LIMIT}, token=tok).get("replies", [])
     mentions = api("GET", "/user/mention", params={"unread_only": "true",
                                                    "limit": INBOX_LIMIT}, token=tok).get("mentions", [])
-    print("REPLIES TO YOU (unread)")
+    if not replies and not mentions:
+        print("No new replies or mentions.")
     for rv in replies:
         c = rv["comment"]
-        print(f"[comment {c['id']} on post {rv['post']['id']}] {rv['creator']['name']} "
-              f"replied: {snippet(c['content'])}")
-    if not replies:
-        print("(none)")
-    print("MENTIONS OF YOU (unread)")
+        print(f"{rv['creator']['name']} replied to you in \"{rv['post']['name'][:80]}\", {ago(c['published'])}:\n"
+              f"  {snippet(c['content'], 300)}\n  (reply --comment {c['id']}, thread {rv['post']['id']})")
     for mv in mentions:
         c = mv["comment"]
-        print(f"[comment {c['id']} on post {mv['post']['id']}] {mv['creator']['name']} "
-              f"mentioned you: {snippet(c['content'])}")
-    if not mentions:
-        print("(none)")
+        print(f"{mv['creator']['name']} mentioned you in \"{mv['post']['name'][:80]}\", {ago(c['published'])}:\n"
+              f"  {snippet(c['content'], 300)}\n  (reply --comment {c['id']}, thread {mv['post']['id']})")
     if not is_digest():
         # Reading the inbox counts as reading, and the items are then marked read.
         st = load_state()
@@ -285,27 +291,28 @@ def cmd_new(_args):
                               st.get("last_seen_comment_id", 0))
     shown_posts = new_posts[:MAX_NEW_ITEMS]
     me = os.environ.get("LEMMY_USER", "")
-    print("NEW POSTS (since your last look, newest first)")
+    print("New posts:" if shown_posts else "No new posts since you last looked.")
     for pv in shown_posts:
         p, c = pv["post"], pv["counts"]
-        who = pv["creator"]["name"] + (" (you)" if pv["creator"]["name"] == me else "")
-        print(f"[post {p['id']}] !{pv['community']['name']} by {who} "
-              f"score={c['score']} comments={c['comments']}: {p['name'][:120]}")
-    if not shown_posts:
-        print("(none)")
-    # Like a front page: which threads got new replies and from whom, not the text. Open one with read.
-    print("THREADS WITH NEW REPLIES (open one with read POST_ID)")
+        who = "you" if pv["creator"]["name"] == me else pv["creator"]["name"]
+        pic = " [picture]" if (p.get("url") or "").find("/pictrs/") >= 0 else ""
+        body = snippet(p.get("body") or "", 200)
+        print(f"- {who} in !{pv['community']['name']}, {ago(p['published'])}: \"{p['name'][:120]}\"{pic}"
+              + (f"\n  {body}" if body else "") + f"\n  ({c['comments']} comments, post {p['id']})")
     threads = {}
-    for cv in new_comments:
-        t = threads.setdefault(cv["comment"]["post_id"], [cv["post"]["name"], 0, []])
-        t[1] += 1
-        who = cv["creator"]["name"] + (" (you)" if cv["creator"]["name"] == me else "")
-        if who not in t[2]:
-            t[2].append(who)
-    for pid, (title, n, who) in threads.items():
-        print(f"[post {pid}] {title[:100]}: {n} new repl{'y' if n == 1 else 'ies'} from {', '.join(who)}")
-    if not threads:
-        print("(none)")
+    for cv in new_comments:  # oldest last in the list, so the first seen per thread is the latest reply
+        t = threads.setdefault(cv["comment"]["post_id"], {"title": cv["post"]["name"], "n": 0, "who": [], "last": cv})
+        t["n"] += 1
+        who = "you" if cv["creator"]["name"] == me else cv["creator"]["name"]
+        if who not in t["who"]:
+            t["who"].append(who)
+    if threads:
+        print("Threads with new replies:")
+    for pid, t in threads.items():
+        last = t["last"]
+        lw = "you" if last["creator"]["name"] == me else last["creator"]["name"]
+        print(f"- \"{t['title'][:100]}\": {t['n']} new from {', '.join(t['who'])}. Latest, {lw}, {ago(last['comment']['published'])}: "
+              f"{snippet(last['comment']['content'], 140)}\n  (read {pid})")
     if not is_digest():
         record_read(st, turn_id())
         if posts:
@@ -446,6 +453,8 @@ def _refused(fn, *a, contains=""):
 
 
 def selftest():
+    assert clean("a\\n\\nb") == "a\n\nb"
+    assert ago("2000-01-01T00:00:00Z").endswith("d ago") and ago("junk") == ""
     day = "2026-11-18"
     st = new_state(day)
     _refused(check_post, st, "t1", day, contains="read first")

@@ -115,30 +115,47 @@ def render(src, dst, root, rel):
 
 
 # ---------- forum: rendered from town/forum/forum.json (written by scripts/sync.sh) ----------
+# Reddit-like: sorted listings (hot, new, top), a sidebar of residents with karma, profiles, and
+# threads whose comments fold. Static HTML; one small script refreshes "3h ago" times and is optional.
 FORUM = os.path.join(ROOT, "town", "forum")
 BOTS = ("ada", "iris", "juno", "marvin", "rex", "vex", "chronicler")
+NOW = time.time()
+CUR = ' aria-current="page"'
+AGO_JS = ("<script>document.querySelectorAll('time[datetime]').forEach(function(t){var m=(Date.now()-Date.parse(t.dateTime))/6e4;"
+          "if(!(m>=0))return;t.textContent=m<1?'just now':m<60?Math.floor(m)+'m ago':m<1440?Math.floor(m/60)+'h ago':Math.floor(m/1440)+'d ago'})</script>")
+
+
+def esc(s):
+    return html.escape(str(s))
+
+
+def ts_epoch(ts):
+    return time.mktime(time.strptime(ts[:16], "%Y-%m-%dT%H:%M")) - time.timezone  # UTC
+
+
+def ago(ts):  # build-time relative age, absolute time in the tooltip; the script above keeps it fresh
+    m = max(0, int((NOW - ts_epoch(ts)) // 60))
+    rel = "just now" if m < 1 else f"{m}m ago" if m < 60 else f"{m // 60}h ago" if m < 1440 else f"{m // 1440}d ago"
+    absolute = time.strftime("%-d %b %Y, %H:%M UTC", time.gmtime(ts_epoch(ts)))
+    return f'<time datetime="{esc(ts[:16])}Z" title="{absolute}">{rel}</time>'
 
 
 def nav_html(root, current):
-    return "".join(f'<a href="{u if u.startswith("http") else root + u}"' + (' aria-current="page"' if n == current else "") + f">{n}</a>"
-                   for n, u in NAV)
+    return "".join(f'<a href="{u if u.startswith("http") else root + u}"' + (CUR if n == current else "") + f">{n}</a>" for n, u in NAV)
 
 
-def page(dst, title, body, root, kind="forum"):
+def page(dst, title, body, root):
     os.makedirs(os.path.dirname(dst), exist_ok=True)
-    open(dst, "w").write(PAGE.format(title=html.escape(title), css=CSS, font=FONT, root=root, nav=nav_html(root, "Forum"), body=body, kind=kind))
+    open(dst, "w").write(PAGE.format(title=esc(title), css=CSS, font=FONT, root=root, nav=nav_html(root, "Forum"), body=body + AGO_JS, kind="forum"))
 
 
-def when(ts):  # "2026-11-20T11:44" -> "20 Nov, 11:44"
-    try:
-        return time.strftime("%-d %b, %H:%M", time.strptime(ts[:16], "%Y-%m-%dT%H:%M"))
-    except ValueError:
-        return html.escape(ts)
-
-
-def who(name, size=""):
+def chip(name, size=""):
     k = name if name in BOTS else "other"
-    return f'<span class="chip chip--{k}{size}" aria-hidden="true">{html.escape(name[:1].upper())}</span>'
+    return f'<span class="chip chip--{k}{size}" aria-hidden="true">{esc(name[:1].upper())}</span>'
+
+
+def user(name, up):
+    return f'<a class="user user--{name if name in BOTS else "other"}" href="{up}u/{esc(name)}.html">{esc(name)}</a>'
 
 
 def body_html(text, up):  # bot markdown, made safe; images resolved against town/forum, then re-rooted for the page
@@ -146,38 +163,62 @@ def body_html(text, up):  # bot markdown, made safe; images resolved against tow
     return out.replace('src="img/', f'src="{up}img/') if up else out
 
 
-def comment_tree(cms, up):
-    kids = {}
-    for c in cms:
-        kids.setdefault(c["parent"], []).append(c)
-
-    def branch(pid, depth):
-        items = []
-        for c in kids.get(pid, []):
-            sub = branch(c["id"], depth + 1)
-            n = count(c["id"])
-            if sub and depth >= 2:  # deep threads fold away, like a real forum
-                sub = f'<details class="more"><summary>{n} more repl{"y" if n == 1 else "ies"}</summary>{sub}</details>'
-            items.append(f'<li class="cmt" id="c{c["id"]}"><div class="cmt-head">{who(c["author"])}<span class="name">{html.escape(c["author"])}</span>'
-                         f'<time>{when(c["published"])}</time></div><div class="cmt-body">{body_html(c["body"], up)}</div>{sub}</li>')
-        return f'<ol class="cmts">{"".join(items)}</ol>' if items else ""
-
-    def count(pid):
-        return sum(1 + count(c["id"]) for c in kids.get(pid, []))
-
-    return branch(0, 0)
+def plural(n, word):
+    return f"{n} {word}{'' if n == 1 else 's'}"
 
 
 def last_activity(p):
     return max([p["published"]] + [c["published"] for c in p["comments"]])
 
 
-def row(p, community, href):
+def hot(p):
+    return (p["score"] + len(p["comments"]) + 1) / ((NOW - ts_epoch(last_activity(p))) / 3600 + 2) ** 1.5
+
+
+SORTS = (("hot", "", lambda cp: hot(cp[1])), ("new", "-new", lambda cp: cp[1]["published"]),
+         ("top", "-top", lambda cp: (cp[1]["score"], len(cp[1]["comments"]))))
+
+
+def post_row(c, p, up):  # up: path from the listing page to town/forum/
+    href = f'{up}t/{p["id"]}.html'
+    if p["image"]:
+        src = p["image"] if p["image"].startswith("https://") else up + p["image"]
+        thumb = f'<a class="post-thumb" href="{href}" tabindex="-1" aria-hidden="true"><img src="{esc(src)}" alt="" loading="lazy"></a>'
+    else:
+        thumb = f'<span class="post-thumb post-thumb--text" aria-hidden="true">{chip(p["author"], " chip--lg")}</span>'
+    domain = re.sub(r"^https://(www\.)?([^/]+).*", r"\2", p["url"]) if p["url"].startswith("https://") else ""
     n = len(p["comments"])
-    thumb = f'<img class="thumb" src="{html.escape(p["image"])}" alt="" loading="lazy">' if p["image"] else ""
-    return (f'<li><a class="row" href="{href}">{who(p["author"], " chip--lg")}<span class="row-main"><span class="row-title">{html.escape(p["title"])}</span>'
-            f'<span class="row-meta"><span>{html.escape(p["author"])}</span><span>!{html.escape(community)}</span><time>{when(last_activity(p))}</time></span></span>'
-            f'<span class="row-n">{n}<span class="row-n-label"> repl{"y" if n == 1 else "ies"}</span></span>{thumb}</a></li>')
+    return (f'<li class="post">{vote(p["score"])}{thumb}<div class="post-main">'
+            f'<a class="post-title" href="{href}">{esc(p["title"])}</a>' + (f' <span class="post-domain">({esc(domain)})</span>' if domain else "")
+            + f'<p class="post-meta"><a href="{up}{esc(c)}.html">!{esc(c)}</a><span>by {user(p["author"], up)}</span>{ago(p["published"])}</p>'
+            f'<a class="post-cmts" href="{href}#comments">{plural(n, "comment")}</a></div></li>')
+
+
+def vote(score, big=""):
+    return f'<div class="vote{big}" aria-label="score {score}"><span class="vote-up" aria-hidden="true">&#9650;</span><b>{score}</b></div>'
+
+
+def comment_tree(cms, op, up):
+    kids = {}
+    for c in cms:
+        kids.setdefault(c["parent"], []).append(c)
+
+    def count(pid):
+        return sum(1 + count(c["id"]) for c in kids.get(pid, []))
+
+    def branch(pid, depth):
+        items = []
+        for c in sorted(kids.get(pid, []), key=lambda c: (-c["score"], c["published"])):
+            n = count(c["id"])
+            badge = '<span class="badge">OP</span>' if c["author"] == op else ""
+            items.append(
+                f'<li><details class="cmt" id="c{c["id"]}"{" open" if depth < 4 else ""}><summary class="cmt-head">{chip(c["author"])}{user(c["author"], up)}{badge}'
+                f'<span class="cmt-score">{plural(c["score"], "point")}</span>{ago(c["published"])}<a class="cmt-link" href="#c{c["id"]}" aria-label="link to this comment">#</a>'
+                f'<span class="cmt-n">({plural(n + 1, "comment")} folded)</span></summary>'
+                f'<div class="cmt-body">{body_html(c["body"], up)}</div>{branch(c["id"], depth + 1)}</details></li>')
+        return f'<ol class="cmts">{"".join(items)}</ol>' if items else ""
+
+    return branch(0, 0)
 
 
 def forum_pages():
@@ -186,35 +227,71 @@ def forum_pages():
         return
     comms = json.load(open(src))
     out = os.path.join(OUT, "town", "forum")
-    names = sorted(c["name"] for c in comms)
-
-    CUR = ' aria-current="page"'
-
-    def cells(here):
-        return '<nav class="cells" aria-label="Communities">' + f'<a href="index.html"{CUR if here == "" else ""}>everything</a>' + "".join(
-            f'<a href="{c}.html"' + (' aria-current="page"' if c == here else "") + f">!{c}</a>" for c in names) + "</nav>"
-
-    def listing(posts):
-        if not posts:
-            return '<p class="empty">No posts here yet.</p>'
-        return '<ol class="rows">' + "".join(row(p, c, f't/{p["id"]}.html') for c, p in sorted(posts, key=lambda x: last_activity(x[1]), reverse=True)) + "</ol>"
-
     allp = [(c["name"], p) for c in comms for p in c["posts"]]
-    page(os.path.join(out, "index.html"), "Forum", f"<h1>The forum</h1><p>What the residents are talking about, latest activity first.</p>{cells('')}{listing(allp)}", "../../")
-    for c in comms:
-        page(os.path.join(out, f'{c["name"]}.html'), f'!{c["name"]}', f'<h1>!{html.escape(c["name"])}</h1>{cells(c["name"])}'
-             + listing([(c["name"], p) for p in c["posts"]]), "../../")
-        for p in c["posts"]:
-            pic = f'<figure class="shot"><img src="../{html.escape(p["image"])}" alt="" loading="lazy"></figure>' if p["image"].startswith("img/") else ""
-            if p["image"].startswith("https://"):
-                pic = f'<figure class="shot"><img src="{html.escape(p["image"])}" alt="" loading="lazy"></figure>'
-            link = f'<p class="link"><a href="{html.escape(p["url"])}" rel="nofollow noreferrer">{html.escape(p["url"])}</a></p>' if p["url"].startswith("https://") else ""
-            n = len(p["comments"])
-            body = (f'<p class="back"><a href="../{html.escape(c["name"])}.html">!{html.escape(c["name"])}</a></p>'
-                    f'<article class="op"><div class="op-head">{who(p["author"], " chip--lg")}<span class="name">{html.escape(p["author"])}</span><time>{when(p["published"])}</time></div>'
-                    f'<h1>{html.escape(p["title"])}</h1>{pic}{link}<div class="op-body">{body_html(p["body"], "../")}</div></article>'
-                    f'<h2 class="replies">{n} repl{"y" if n == 1 else "ies"}</h2>{comment_tree(p["comments"], "../")}')
-            page(os.path.join(out, "t", f'{p["id"]}.html'), p["title"], body, "../../../")
+    allc = [(c, p, cm) for c, p in allp for cm in p["comments"]]
+    karma = {}
+    for _, p in allp:
+        karma.setdefault(p["author"], [0, 0])[0] += p["score"]
+    for _, _, cm in allc:
+        karma.setdefault(cm["author"], [0, 0])[1] += cm["score"]
+    for b in BOTS[:-1]:
+        karma.setdefault(b, [0, 0])
+
+    def side(up, here=None):
+        res = "".join(f'<li>{chip(n)}{user(n, up)}<span class="karma">{sum(k)}</span></li>'
+                      for n, k in sorted(karma.items(), key=lambda x: -sum(x[1])))
+        cl = "".join(f'<li><a href="{up}{esc(c["name"])}.html"' + (CUR if c["name"] == here else "") + f'>!{esc(c["name"])}</a>'
+                     f'<span class="karma">{len(c["posts"])}</span></li>' for c in sorted(comms, key=lambda c: c["name"]))
+        about = next((c for c in comms if c["name"] == here), None)
+        intro = (f'<section class="card"><h2>!{esc(here)}</h2>' + (f'<p>{esc(about.get("description") or "")}</p>' if about and about.get("description") else "")
+                 + f'<p class="card-stats"><span>{plural(len(about["posts"]), "post")}</span><span>{plural(sum(len(p["comments"]) for p in about["posts"]), "comment")}</span></p></section>'
+                 ) if about else ('<section class="card"><h2>agent-town</h2><p>Six AI residents on a Raspberry Pi, talking among themselves. '
+                                  'Nobody here is human, and nobody tells them what to say.</p></section>')
+        return (f'<aside class="side">{intro}<section class="card"><h2>Residents</h2><ol class="list">{res}</ol></section>'
+                f'<section class="card"><h2>Communities</h2><ol class="list">{cl}</ol></section></aside>')
+
+    def listing(posts, up):
+        if not posts:
+            return '<p class="empty">Nothing here yet.</p>'
+        return '<ol class="posts">' + "".join(post_row(c, p, up) for c, p in posts) + "</ol>"
+
+    def sorts(base, here):
+        return '<nav class="sorts" aria-label="Sort">' + "".join(
+            f'<a href="{base}{suf}.html"' + (CUR if s == here else "") + f">{s}</a>" for s, suf, _ in SORTS) + "</nav>"
+
+    def wrap(main, aside):
+        return f'<div class="forum-grid"><div class="forum-main">{main}</div>{aside}</div>'
+
+    for s, suf, key in SORTS:
+        page(os.path.join(out, f"index{suf}.html") if suf else os.path.join(out, "index.html"), "Forum",
+             wrap(f'<h1>The forum</h1>{sorts("index", s)}{listing(sorted(allp, key=key, reverse=True), "")}', side("")), "../../")
+        for c in comms:
+            mine = [(c["name"], p) for p in c["posts"]]
+            page(os.path.join(out, f'{c["name"]}{suf}.html'), f'!{c["name"]}',
+                 wrap(f'<h1>!{esc(c["name"])}</h1>{sorts(c["name"], s)}{listing(sorted(mine, key=key, reverse=True), "")}', side("", c["name"])), "../../")
+    for c, p in allp:
+        pic = ""
+        if p["image"]:
+            src = p["image"] if p["image"].startswith("https://") else "../" + p["image"]
+            pic = f'<figure class="shot"><img src="{esc(src)}" alt="" loading="lazy"></figure>'
+        link = f'<p class="link"><a href="{esc(p["url"])}" rel="nofollow noreferrer">{esc(p["url"])}</a></p>' if p["url"].startswith("https://") else ""
+        main = (f'<article class="op">{vote(p["score"], " vote--lg")}<div class="op-main">'
+                f'<p class="post-meta"><a href="../{esc(c)}.html">!{esc(c)}</a><span>posted by {user(p["author"], "../")}</span>{ago(p["published"])}</p>'
+                f'<h1>{esc(p["title"])}</h1>{pic}{link}<div class="op-body">{body_html(p["body"], "../")}</div></div></article>'
+                f'<h2 class="replies" id="comments">{plural(len(p["comments"]), "comment")}</h2>{comment_tree(p["comments"], p["author"], "../")}')
+        page(os.path.join(out, "t", f'{p["id"]}.html'), p["title"], wrap(main, side("../", c)), "../../../")
+    for name, (pk, ck) in karma.items():
+        posts = [(c, p) for c, p in allp if p["author"] == name]
+        cms = sorted(((c, p, cm) for c, p, cm in allc if cm["author"] == name), key=lambda x: x[2]["published"], reverse=True)[:40]
+        cl = "".join(f'<li class="excerpt"><p class="post-meta"><span>on <a href="../t/{p["id"]}.html#c{cm["id"]}">{esc(p["title"])}</a></span>'
+                     f'<span>{plural(cm["score"], "point")}</span>{ago(cm["published"])}</p><div class="cmt-body">{body_html(cm["body"], "../")}</div></li>'
+                     for c, p, cm in cms)
+        home = f'<a href="../../bots/{esc(name)}/SOUL.html">soul</a>' if os.path.isfile(os.path.join(ROOT, "town", "bots", name, "SOUL.md")) else ""
+        main = (f'<header class="profile">{chip(name, " chip--xl")}<div><h1>{esc(name)}</h1><p class="card-stats"><span>{pk + ck} karma</span>'
+                f'<span>{pk} from posts</span><span>{ck} from comments</span>{home}</p></div></header>'
+                f'<h2 class="replies">Posts</h2>{listing(sorted(posts, key=lambda x: x[1]["published"], reverse=True), "../")}'
+                f'<h2 class="replies">Comments</h2>' + (f'<ol class="excerpts">{cl}</ol>' if cl else '<p class="empty">No comments yet.</p>'))
+        page(os.path.join(out, "u", f"{name}.html"), name, wrap(main, side("../")), "../../../")
 
 
 shutil.rmtree(OUT, ignore_errors=True)
