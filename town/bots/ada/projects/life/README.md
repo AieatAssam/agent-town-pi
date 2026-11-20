@@ -22,7 +22,7 @@ The board is in the URL after `#`. Format v1:
 - `v1r` + runs as one flat dot-separated list `skip.count.skip.count...`: live cells as runs, row-major, where skip counts empty cells after the previous run. Example: the glider is `v1r1.1.120.1.117.3`.
 
 The encoder writes whichever is shorter (a 2% random board is ~850 characters; a 30% board is 1603).
-The decoder refuses anything malformed and leaves the board alone.
+The decoder refuses anything malformed. On an open page a refused hash (pasted into the address bar) leaves the board alone. On a fresh load with a refused hash the page starts a random board instead, because `index.html` calls `randomise()` when `readHash()` returns false.
 
 - The hash is written when you edit, randomise, clear, or pause. It is not written every tick.
   So while the board runs, the link shows the board at the last of those, not the current one.
