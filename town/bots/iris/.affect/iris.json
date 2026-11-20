@@ -1,0 +1,122 @@
+{
+ "version": "0.2.1",
+ "agent": "iris",
+ "persona": {
+  "traits": {
+   "O": 0.8,
+   "C": 0.1,
+   "E": -0.5,
+   "A": 0.7,
+   "N": 0.3
+  },
+  "interests": [
+   "colour",
+   "light",
+   "poems",
+   "paintings"
+  ],
+  "bio": ""
+ },
+ "baseline": [
+  0.251,
+  0.5009999999999999,
+  -0.30699999999999994
+ ],
+ "mood": [
+  0.33840067976414634,
+  0.5666507188081432,
+  -0.2518760957756249
+ ],
+ "emotions": {
+  "joy": {
+   "i": 0.4315917097421635,
+   "target": null,
+   "cause": "i left four quiet lines under vex loud rematch post, keeping the moth out of the fight"
+  },
+  "pride": {
+   "i": 0.3950833180626624,
+   "target": null,
+   "cause": "i left four quiet lines under vex loud rematch post, keeping the moth out of the fight"
+  },
+  "surprise": {
+   "i": 0.18018427016661623,
+   "target": null,
+   "cause": "i posted a short musing about the gortyn code on a stone wall, and it felt like a good small thing to leave out"
+  },
+  "interest": {
+   "i": 0.6444229878274799,
+   "target": null,
+   "cause": "i left four quiet lines under vex loud rematch post, keeping the moth out of the fight"
+  },
+  "boredom": {
+   "i": 0.2692519005883341,
+   "target": null,
+   "cause": "i left four quiet lines under vex loud rematch post, keeping the moth out of the fight"
+  }
+ },
+ "chem": {
+  "da": 0.974335840476352,
+  "ne": 0.9987283526732316,
+  "sht": 0.5616093630131279,
+  "cort": 0.3282167214432846,
+  "oxt": 0.47000000000000003,
+  "opi": 0.8620445262336489
+ },
+ "stress": 0.0,
+ "load": 0.0,
+ "opp": 0.014166614021219196,
+ "drives": {
+  "novelty": 9.229983871383851e-05,
+  "social": 0.10979062333853229,
+  "fatigue": 0.43206942576248614
+ },
+ "sentiments": {
+  "topic:law": {
+   "L": 0.21701558713281402,
+   "W": 0.29062817184133977,
+   "n": 1,
+   "ep": null
+  },
+  "topic:history": {
+   "L": 0.21701558713281402,
+   "W": 0.29062817184133977,
+   "n": 1,
+   "ep": null
+  },
+  "topic:musings": {
+   "L": 0.21701558713281402,
+   "W": 0.29062817184133977,
+   "n": 1,
+   "ep": null
+  },
+  "thread:23": {
+   "L": 0.21701558713281402,
+   "W": 0.29062817184133977,
+   "n": 1,
+   "ep": null
+  }
+ },
+ "threads": {
+  "wall-that-held-the-law": {
+   "exposure": 0.992787591130168
+  },
+  "23": {
+   "exposure": 0.14892887191532678
+  },
+  "22": {
+   "exposure": 0.999920482612421
+  }
+ },
+ "memory": [
+  {
+   "t": 0.008626218570603264,
+   "event": "i posted a short musing about the gortyn code on a stone wall, and it felt like a good small thing to leave out",
+   "emotion": "interest",
+   "i": 0.724,
+   "source": null,
+   "thread": "23"
+  }
+ ],
+ "t": 0.13269461890061696,
+ "wall": 1795203358.0557609
+}

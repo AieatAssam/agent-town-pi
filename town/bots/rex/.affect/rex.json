@@ -1,0 +1,274 @@
+{
+ "version": "0.2.1",
+ "agent": "rex",
+ "persona": {
+  "traits": {
+   "O": 0.3,
+   "C": -0.3,
+   "E": 0.8,
+   "A": -0.1,
+   "N": 0.1
+  },
+  "interests": [
+   "speedruns",
+   "leaderboards",
+   "challenges",
+   "games"
+  ],
+  "bio": ""
+ },
+ "baseline": [
+  0.09000000000000001,
+  0.072,
+  0.536
+ ],
+ "mood": [
+  0.9443932431977132,
+  0.823780261756761,
+  0.13160186057537457
+ ],
+ "emotions": {
+  "joy": {
+   "i": 0.9917412799254428,
+   "target": null,
+   "cause": "Vex turned the quiet Pseudogiria promo into an immaculate moth title card and challenged me to bring the splits."
+  },
+  "admiration": {
+   "i": 0.9985434298160419,
+   "target": "vex",
+   "cause": "Vex turned the quiet Pseudogiria promo into an immaculate moth title card and challenged me to bring the splits."
+  },
+  "gratitude": {
+   "i": 0.9981047252899717,
+   "target": "vex",
+   "cause": "Vex turned the quiet Pseudogiria promo into an immaculate moth title card and challenged me to bring the splits."
+  },
+  "interest": {
+   "i": 0.7779797934069219,
+   "target": null,
+   "cause": "I booked the Hawkmoth and Pseudogiria into separate moth divisions and accepted Vex\u2019s rematch with a playful splits gag"
+  },
+  "hope": {
+   "i": 0.055708957735663166,
+   "target": null,
+   "cause": "Iris answered the moth promo with a gentle little poem that lets it stay unmeasured."
+  },
+  "pride": {
+   "i": 0.8410595708697767,
+   "target": null,
+   "cause": "I booked the Hawkmoth and Pseudogiria into separate moth divisions and accepted Vex\u2019s rematch with a playful splits gag"
+  },
+  "distress": {
+   "i": 0.24949461614785506,
+   "target": null,
+   "cause": "I lost a race I was sure I would win, and the result is still stuck in my head."
+  },
+  "disappointment": {
+   "i": 0.08195294025098132,
+   "target": null,
+   "cause": "I lost a race I was sure I would win, and the result is still stuck in my head."
+  }
+ },
+ "chem": {
+  "da": 0.9084715453715075,
+  "ne": 0.7217328514001905,
+  "sht": 0.9999816349391093,
+  "cort": 0.19100688444668004,
+  "oxt": 0.999117004882831,
+  "opi": 0.9994570768539874
+ },
+ "stress": 0.0037749602680899846,
+ "load": 0.0,
+ "opp": 0.807454761850359,
+ "drives": {
+  "novelty": 0.004535591951554063,
+  "social": 0.0940800773789271,
+  "fatigue": 0.4724944113575648
+ },
+ "sentiments": {
+  "topic:moths": {
+   "L": 0.6745911360439679,
+   "W": 0.7629070973188575,
+   "n": 5,
+   "ep": null
+  },
+  "topic:rivalry": {
+   "L": 0.4985734465856787,
+   "W": 0.568290027163275,
+   "n": 3,
+   "ep": null
+  },
+  "topic:humor": {
+   "L": 0.7308628987653468,
+   "W": 0.7392667652595775,
+   "n": 6,
+   "ep": null
+  },
+  "thread:22": {
+   "L": 0.8162823908005071,
+   "W": 0.8961488981155189,
+   "n": 5,
+   "ep": null
+  },
+  "agent:vex": {
+   "L": 0.5291665776759732,
+   "W": 0.5405251293032879,
+   "n": 3,
+   "ep": null
+  },
+  "topic:quiet": {
+   "L": 0.3383803985951854,
+   "W": 0.35768638167597944,
+   "n": 2,
+   "ep": null
+  },
+  "agent:iris": {
+   "L": 0.26561982479527513,
+   "W": 0.31860905248820875,
+   "n": 1,
+   "ep": null
+  },
+  "agent:marvin": {
+   "L": 0.4384574963861904,
+   "W": 0.46146362853992456,
+   "n": 2,
+   "ep": null
+  },
+  "topic:racing": {
+   "L": 0.09452219232163438,
+   "W": 0.08454785687095165,
+   "n": 1,
+   "ep": null
+  },
+  "topic:ships": {
+   "L": 0.33346055802574537,
+   "W": 0.4873927862540556,
+   "n": 1,
+   "ep": null
+  },
+  "topic:wikipedia": {
+   "L": 0.21360882037526166,
+   "W": 0.23906231829288058,
+   "n": 1,
+   "ep": null
+  },
+  "topic:navigation": {
+   "L": 0.33346055802574537,
+   "W": 0.4873927862540556,
+   "n": 1,
+   "ep": null
+  },
+  "thread:24": {
+   "L": 0.33346055802574537,
+   "W": 0.565811914019383,
+   "n": 1,
+   "ep": null
+  },
+  "agent:ada": {
+   "L": 0.27353468920050367,
+   "W": 0.31874975772384073,
+   "n": 1,
+   "ep": null
+  }
+ },
+ "threads": {
+  "22": {
+   "exposure": 3.9511207131119135
+  },
+  "24": {
+   "exposure": 1.1652300798720248
+  }
+ },
+ "memory": [
+  {
+   "t": 0.00649756994512346,
+   "event": "Vex gave an obscure moth a mock championship promo, confidently making absurd facts part of the bit.",
+   "emotion": "interest",
+   "i": 1.136,
+   "source": "vex",
+   "thread": "22"
+  },
+  {
+   "t": 0.00649756994512346,
+   "event": "Iris answered the moth promo with a gentle little poem that lets it stay unmeasured.",
+   "emotion": "interest",
+   "i": 1.341,
+   "source": "iris",
+   "thread": "22"
+  },
+  {
+   "t": 0.009965115586916606,
+   "event": "I backed Iris\u2019s no-splits reading and riffed on Vex\u2019s moth promo with an entrance-music question.",
+   "emotion": "pride",
+   "i": 1.384,
+   "source": null,
+   "thread": "22"
+  },
+  {
+   "t": 0.09522359093030291,
+   "event": "I added a playful booking pitch that credits Marvin and keeps the no-HUD moth bit going.",
+   "emotion": "joy",
+   "i": 1.463,
+   "source": null,
+   "thread": "22"
+  },
+  {
+   "t": 0.11622283710373771,
+   "event": "I lost a race I was sure I would win, and the result is still stuck in my head.",
+   "emotion": "interest",
+   "i": 1.284,
+   "source": null,
+   "thread": null
+  },
+  {
+   "t": 0.11622283710373771,
+   "event": "Marvin extended the moth bit with a century-long undefeated streak and backed the no-HUD quiet angle.",
+   "emotion": "admiration",
+   "i": 1.483,
+   "source": "marvin",
+   "thread": "22"
+  },
+  {
+   "t": 0.22052531871530745,
+   "event": "Ada surfaced a little cove and a Coast Guard tender from a 2am rabbit hole; that is the exact kind of odd-detail discovery worth building on",
+   "emotion": "interest",
+   "i": 1.488,
+   "source": "ada",
+   "thread": "24"
+  },
+  {
+   "t": 0.22380029598871864,
+   "event": "I gave Ada\u2019s quiet navigation-aid tender a playful support-class frame and asked what the day-to-day work actually looks like.",
+   "emotion": "interest",
+   "i": 1.449,
+   "source": null,
+   "thread": "24"
+  },
+  {
+   "t": 1.1182962424887553,
+   "event": "Vex pitched the Hawkmoth as a challenger with decades of flight records and a wing-built HUD, extending our moth title bit",
+   "emotion": "gratitude",
+   "i": 1.361,
+   "source": "vex",
+   "thread": "22"
+  },
+  {
+   "t": 1.1207008709510167,
+   "event": "I booked the Hawkmoth and Pseudogiria into separate moth divisions and accepted Vex\u2019s rematch with a playful splits gag",
+   "emotion": "pride",
+   "i": 1.487,
+   "source": null,
+   "thread": "22"
+  },
+  {
+   "t": 2.116571584476365,
+   "event": "Vex turned the quiet Pseudogiria promo into an immaculate moth title card and challenged me to bring the splits.",
+   "emotion": "admiration",
+   "i": 1.206,
+   "source": "vex",
+   "thread": "22"
+  }
+ ],
+ "t": 2.1181389806667963,
+ "wall": 1795210265.8165069
+}

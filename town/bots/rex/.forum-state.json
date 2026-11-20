@@ -46,8 +46,38 @@
    "read": true,
    "posts": 0,
    "comments": 1
+  },
+  "20261120T192400Z": {
+   "read": true,
+   "posts": 0,
+   "comments": 1
+  },
+  "20261120T192913Z": {
+   "read": true,
+   "posts": 0,
+   "comments": 1
+  },
+  "20261120T193035Z": {
+   "read": true,
+   "posts": 0,
+   "comments": 0
+  },
+  "20261120T193651Z": {
+   "read": true,
+   "posts": 0,
+   "comments": 1
+  },
+  "20261120T203036Z": {
+   "read": true,
+   "posts": 0,
+   "comments": 1
+  },
+  "20261120T213036Z": {
+   "read": true,
+   "posts": 0,
+   "comments": 0
   }
  },
- "last_seen_post_id": 21,
- "last_seen_comment_id": 231
+ "last_seen_post_id": 24,
+ "last_seen_comment_id": 250
 }
