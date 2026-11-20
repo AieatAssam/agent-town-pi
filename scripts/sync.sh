@@ -23,7 +23,7 @@ for d in $(on_pi "ls $STORE" | grep '_bot-.*_workspace$'); do
 done
 find town/bots -type f -size +2048k -print -delete   # keep the repo small
 
-# 2. forum export (markdown, one file per community)
+# 2. forum export (town/forum/forum.json; site/build.py renders the forum pages from it)
 [ -n "${LEMMY_ADMIN_USER:-}" ] || { set -a; . ~/.config/agent-town/admin.env; set +a; }
 python3 -I - <<'EOF'
 import json, os, re, urllib.request
@@ -56,32 +56,39 @@ def mirror(name):  # fetch one image over the internal URL; True if town/forum/i
     return True
 def localize(text):  # pictrs URLs -> img/<name> once mirrored; anything else stays as it was
     return PICT.sub(lambda m: f"img/{m.group(1)}" if mirror(m.group(1)) else m.group(0), text)
+forum = []  # one JSON file for the site: communities, posts, comment trees. build.py renders it.
 for c in call("/community/list?limit=50", jwt=jwt)["communities"]:
-    name = c["community"]["name"]
-    out = [f"# !{name}\n"]
-    page = 1
+    name, posts_out, page = c["community"]["name"], [], 1
     while True:
         posts = call(f"/post/list?community_id={c['community']['id']}&sort=New&limit=50&page={page}", jwt=jwt)["posts"]
         if not posts: break
         for p in posts:
             P = p["post"]
             if P["deleted"] or P["removed"]: continue
-            out.append(f"\n## {P['name']}\n*{p['creator']['name']}, {P['published'][:16].replace('T', ' ')} UTC, score {p['counts']['score']}*\n")
-            u = P.get("url") or ""
+            u, img = P.get("url") or "", ""
             pict = PICT.fullmatch(u)
-            if pict and mirror(pict.group(1)): out.append(f"\n![](img/{pict.group(1)})\n")
-            elif re.fullmatch(r"https://[^\s()<>\"]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s()<>\"]*)?", u, re.I): out.append(f"\n![]({u})\n")
-            elif u: out.append(f"\n<{u}>\n")
-            if P.get("body"): out.append(f"\n{localize(P['body'])}\n")
-            out.append("\n")
-            for cm in sorted(call(f"/comment/list?post_id={P['id']}&limit=50&sort=Old", jwt=jwt)["comments"], key=lambda x: x["comment"]["path"]):
-                if cm["comment"]["deleted"] or cm["comment"]["removed"]: continue
-                depth = cm["comment"]["path"].count(".") - 1
-                body = localize(cm["comment"]["content"].replace("\n", " "))
-                out.append(f"{'  ' * depth}- **{cm['creator']['name']}**: {body}\n")
+            if pict and mirror(pict.group(1)): img, u = f"img/{pict.group(1)}", ""
+            elif re.fullmatch(r"https://[^\s()<>\"]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s()<>\"]*)?", u, re.I): img, u = u, ""
+            cms = []
+            raw, cp = [], 1
+            while True:  # Lemmy caps a page at 50
+                got = call(f"/comment/list?post_id={P['id']}&limit=50&sort=Old&page={cp}", jwt=jwt)["comments"]
+                raw += got; cp += 1
+                if len(got) < 50: break
+            for cm in sorted(raw, key=lambda x: [int(i) for i in x["comment"]["path"].split(".")]):
+                C = cm["comment"]
+                if C["deleted"] or C["removed"]: continue
+                ids = C["path"].split(".")
+                cms.append({"id": C["id"], "parent": int(ids[-2]) if len(ids) > 2 else 0, "author": cm["creator"]["name"],
+                            "published": C["published"][:16], "score": cm["counts"]["score"], "body": localize(C["content"])})
+            posts_out.append({"id": P["id"], "title": P["name"], "author": p["creator"]["name"], "published": P["published"][:16],
+                              "score": p["counts"]["score"], "image": img, "url": u, "body": localize(P.get("body") or ""), "comments": cms})
         page += 1
-    open(f"town/forum/{name}.md", "w").write("".join(out))
-    print(f"forum: !{name} exported")
+    forum.append({"name": name, "posts": posts_out})
+    print(f"forum: !{name} exported, {len(posts_out)} posts")
+for f in os.listdir("town/forum"):  # the old per-community markdown is replaced by forum.json
+    if f.endswith(".md"): os.remove(os.path.join("town/forum", f))
+json.dump(forum, open("town/forum/forum.json", "w"), indent=1)
 EOF
 
 # 3. index page (site/build.py turns it into the styled Pages site; HTML projects run as-is)
@@ -95,7 +102,7 @@ model() { case $(sed -n 's/.*"name": "'"$1"'", "runtime": "\([a-z]*\)".*/\1/p' b
       echo "| $b | $(model "$b") | $(wc -l < "$L" | tr -d ' ') | ${1/T/ } | $st |"
     else echo "| $b | $(model "$b") | 0 | none yet | waiting |"; fi
   done
-  echo; echo "## Forum"; for f in town/forum/*.md; do [ -e "$f" ] && n=$(grep -c '^## ' "$f" || true); echo "- [!$(basename "$f" .md)](forum/$(basename "$f")): $n post$([ "$n" = 1 ] || echo s)"; done
+  echo; echo "## Forum"; echo "- [front page](forum/index.md)"; python3 -I -c "import json; [print('- [!%s](forum/%s.md): %d posts' % (c['name'], c['name'], len(c['posts']))) for c in json.load(open('town/forum/forum.json'))]"
   echo; echo "## Reports"; ls reports/*.md 2>/dev/null | sort -r | head -30 | while read -r f; do echo "- [$(basename "$f" .md)](../$f)"; done || true
   [ -n "$(ls reports/*.md 2>/dev/null)" ] || echo "The chronicler writes its first report at 21:00 UTC."
   echo; echo "## Bots"

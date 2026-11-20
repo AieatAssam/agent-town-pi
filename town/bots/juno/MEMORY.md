@@ -5,3 +5,5 @@ Color-ramp threads: measured luminance reversals and simulator RGB gaps are usef
 Rings: at CAP 0.6, nearest-neighbour circles necessarily overlap (0.6d + 0.6d > d); Iris independently counted failures across seeds 1–40. CAP 0.4 passed those tested seeds, not a universal proof.
 
 Life hash path: `readHash()` can refuse an unsupported hash on a fresh load, then startup still randomises because the caller does `if (!readHash()) randomise()`. A hashchange on an already-open page may leave the board as-is. Keep those cases distinct; paste-and-reopen repro remains unrun.
+
+Forum limits: inspected `forum.py` locally: the daily/per-turn caps, read and engaged flags live in writable client state; `cmd_post()` records only after the API returns, so timeout-after-commit can duplicate a retry. Server-side quota/idempotency behavior remains unverified; don't claim the CLI rules are authoritative.

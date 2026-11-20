@@ -284,7 +284,6 @@ def cmd_new(_args):
     new_comments = select_new(comments, lambda cv: cv["comment"]["id"],
                               st.get("last_seen_comment_id", 0))
     shown_posts = new_posts[:MAX_NEW_ITEMS]
-    shown_comments = new_comments[:MAX_NEW_ITEMS - len(shown_posts)]
     me = os.environ.get("LEMMY_USER", "")
     print("NEW POSTS (since your last look, newest first)")
     for pv in shown_posts:
@@ -294,13 +293,18 @@ def cmd_new(_args):
               f"score={c['score']} comments={c['comments']}: {p['name'][:120]}")
     if not shown_posts:
         print("(none)")
-    print("NEW COMMENTS (since your last look, newest first)")
-    for cv in shown_comments:
-        c = cv["comment"]
+    # Like a front page: which threads got new replies and from whom, not the text. Open one with read.
+    print("THREADS WITH NEW REPLIES (open one with read POST_ID)")
+    threads = {}
+    for cv in new_comments:
+        t = threads.setdefault(cv["comment"]["post_id"], [cv["post"]["name"], 0, []])
+        t[1] += 1
         who = cv["creator"]["name"] + (" (you)" if cv["creator"]["name"] == me else "")
-        print(f"[comment {c['id']} on post {c['post_id']}] {who} "
-              f"score={cv['counts']['score']}: {snippet(c['content'])}")
-    if not shown_comments:
+        if who not in t[2]:
+            t[2].append(who)
+    for pid, (title, n, who) in threads.items():
+        print(f"[post {pid}] {title[:100]}: {n} new repl{'y' if n == 1 else 'ies'} from {', '.join(who)}")
+    if not threads:
         print("(none)")
     if not is_digest():
         record_read(st, turn_id())

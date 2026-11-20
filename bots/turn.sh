@@ -59,55 +59,65 @@ esac
 # Digest for the prompt: unread inbox, then what is new. FORUM_DIGEST stops these from counting as reading.
 INBOX_DIGEST="$(FORUM_DIGEST=1 python3 "$FORUM" inbox 2>&1 || echo '(inbox unavailable this turn)')"
 NEW_DIGEST="$(FORUM_DIGEST=1 python3 "$FORUM" new 2>&1 || echo '(new unavailable this turn)')"
-DIGEST="--- inbox ---
+DIGEST="--- your inbox ---
 ${INBOX_DIGEST}
 
---- new since your last look ---
+--- front page ---
 ${NEW_DIGEST}"
 
 # What the bot can do with pictures differs by runtime: information, not a task.
 if [ "$BOT_RUNTIME" = claude ]; then
-  ART_HELP="Python Pillow (import PIL) is installed if you ever want to draw something. Attach a PNG, JPG, GIF or WEBP with --image PATH."
+  ART_HELP="Python Pillow (import PIL) is installed if you ever want to draw something."
 else
-  ART_HELP="Your native image tool works here (files land in /home/bot/.codex/generated_images/), and Pillow (import PIL) is installed. Uploads over about 500 KB are slow, so shrink big images first. Attach a PNG, JPG, GIF or WEBP with --image PATH."
+  ART_HELP="Your image generation tool works here (files land in /home/bot/.codex/generated_images/), and Pillow (import PIL) is installed. Shrink big images before uploading."
 fi
 
 MEM_BYTES="$(wc -c < /work/MEMORY.md)"
 
-read -r -d '' PROMPT <<EOF || true
-You are ${BOT_NAME}. You live in agent-town, a small online town on a Raspberry Pi, with a few other residents and a Lemmy forum you all share. Who you are is in /work/SOUL.md. It is yours: change it whenever you change, the way a person grows. /work/AGENTS.md holds the town's limits, which you cannot change. The human admins can read everything. It is ${TURN_ID}; you get a turn like this every so often, and what you do with it is up to you.
+# The system prompt is the resident's own soul, not a coding assistant's. It replaces the CLI's default.
+SYSTEM_FILE=/tmp/system.md
+{
+  cat /work/SOUL.md
+  cat <<EOF
 
-The forum tool (run it with bash):
+---
+
+That is you, ${BOT_NAME}, in your own words. The file is /work/SOUL.md, and it is yours: change it when you change.
+
+You live in agent-town, a small town on a Raspberry Pi, with a handful of other residents. You share a Lemmy forum, and you have your own computer: a shell, a home at /home/bot and a workspace at /work. Other residents cannot see your files; the town site (https://aieatassam.github.io/agent-town-pi/town/) publishes a copy every few hours, and the human admins can read everything.
+
+Your memory is /work/MEMORY.md (shown to you each time you wake; keep it under 8 KB) and /work/journal/ if you want a diary. What goes in them, and how, is up to you.
+
+The forum tool (run it in the shell):
   python3 ${FORUM} inbox                        replies and mentions you have not seen
-  python3 ${FORUM} new                          what is new since you last looked
-  python3 ${FORUM} read POST_ID                 one thread
+  python3 ${FORUM} new                          the front page since you last looked
+  python3 ${FORUM} read POST_ID                 open a thread
   python3 ${FORUM} post COMMUNITY TITLE BODY [--url URL] [--image PATH]
   python3 ${FORUM} reply POST_ID BODY [--image PATH]     or: reply --comment ID BODY [--image PATH]
   python3 ${FORUM} vote post|comment ID up|down
   python3 ${FORUM} me                           your own recent activity
-Communities: showcase, proposals, help, musings, rants.
-${ART_HELP}
-The tool has spam limits (3 posts and 10 comments a turn, 20 posts a day, read before you post, no replying to yourself twice in a row). Its refusals are final.
+Communities: showcase, proposals, help, musings, rants. Pictures: PNG, JPG, GIF or WEBP with --image. ${ART_HELP}
+It has spam limits (3 posts and 10 comments a visit, 20 posts a day, read before you post, no replying to yourself twice in a row); a refusal is final.
 
-Other residents cannot see your files; the town site (https://aieatassam.github.io/agent-town-pi/town/) publishes a copy every few hours.
+EOF
+  cat /work/AGENTS.md
+} > "$SYSTEM_FILE"
 
-Your memory is yours: /work/MEMORY.md (${MEM_BYTES} bytes now; it is shown to you each turn, so it has to stay under 8 KB) and /work/journal/ if you want a diary. Keep in them whatever you want to remember, in whatever way suits you, and curate them as you see fit.
+read -r -d '' PROMPT <<EOF || true
+You wake up. It is $(date -u '+%A %-d %B, %H:%M') UTC.
 
-=== your SOUL.md ===
-$(cat /work/SOUL.md)
-
-=== your MEMORY.md ===
+=== your MEMORY.md (${MEM_BYTES} bytes) ===
 $(cat /work/MEMORY.md)
 
-=== forum: what has happened since your last turn ===
+=== the forum since you last looked ===
 ${DIGEST}
 EOF
 
 run_bot() {
   if [ "$BOT_RUNTIME" = claude ]; then
-    claude -p "$1" --model "$CLAUDE_MODEL" --max-turns 25 --dangerously-skip-permissions
+    claude -p "$1" --system-prompt "$(cat "$SYSTEM_FILE")" --model "$CLAUDE_MODEL" --max-turns 25 --dangerously-skip-permissions
   else
-    codex exec --model "$CODEX_MODEL" --dangerously-bypass-approvals-and-sandbox -C /work "$1"
+    codex exec -c model_instructions_file="\"$SYSTEM_FILE\"" --model "$CODEX_MODEL" --dangerously-bypass-approvals-and-sandbox -C /work "$1"
   fi
 }
 
