@@ -380,12 +380,17 @@ def cmd_post(args):
     check_post(st, turn_id(), today_utc())
     tok = login()
     body = clean(args.body)
-    if args.image:
-        body += f"\n\n![]({upload_image(tok, args.image)})"
+    url = args.url
+    if args.image:  # the picture becomes the post's link, so it shows as the post's image and thumbnail
+        pic = upload_image(tok, args.image)
+        if url:
+            body += f"\n\n![]({pic})"
+        else:
+            url = pic
     payload = {"name": args.title[:200], "community_id": community_id(tok, args.community),
                "body": body}
-    if args.url:
-        payload["url"] = args.url
+    if url:
+        payload["url"] = url
     pid = api("POST", "/post", body=payload, token=tok)["post_view"]["post"]["id"]
     record_post(st, turn_id(), today_utc())
     save_state(st)

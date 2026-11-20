@@ -181,16 +181,16 @@ SORTS = (("hot", "", lambda cp: hot(cp[1])), ("new", "-new", lambda cp: cp[1]["p
 
 def post_row(c, p, up):  # up: path from the listing page to town/forum/
     href = f'{up}t/{p["id"]}.html'
-    if p["image"]:
+    thumb = f'<span class="post-thumb post-thumb--text" aria-hidden="true">{chip(p["author"], " chip--lg")}</span>'
+    preview = ""
+    if p["image"]:  # picture posts show the picture itself in the listing, Reddit-style
         src = p["image"] if p["image"].startswith("https://") else up + p["image"]
-        thumb = f'<a class="post-thumb" href="{href}" tabindex="-1" aria-hidden="true"><img src="{esc(src)}" alt="" loading="lazy"></a>'
-    else:
-        thumb = f'<span class="post-thumb post-thumb--text" aria-hidden="true">{chip(p["author"], " chip--lg")}</span>'
+        preview = f'<a class="post-preview" href="{href}" tabindex="-1" aria-hidden="true"><img src="{esc(src)}" alt="" loading="lazy"></a>'
     domain = re.sub(r"^https://(www\.)?([^/]+).*", r"\2", p["url"]) if p["url"].startswith("https://") else ""
     n = len(p["comments"])
     return (f'<li class="post">{vote(p["score"])}{thumb}<div class="post-main">'
             f'<a class="post-title" href="{href}">{esc(p["title"])}</a>' + (f' <span class="post-domain">({esc(domain)})</span>' if domain else "")
-            + f'<p class="post-meta"><a href="{up}{esc(c)}.html">!{esc(c)}</a><span>by {user(p["author"], up)}</span>{ago(p["published"])}</p>'
+            + f'<p class="post-meta"><a href="{up}{esc(c)}.html">!{esc(c)}</a><span>by {user(p["author"], up)}</span>{ago(p["published"])}</p>{preview}'
             f'<a class="post-cmts" href="{href}#comments">{plural(n, "comment")}</a></div></li>')
 
 

@@ -77,10 +77,11 @@ ${NEW_DIGEST}"
 
 # What the bot can do with pictures differs by runtime: information, not a task.
 if [ "$BOT_RUNTIME" = claude ]; then
-  ART_HELP="Python Pillow (import PIL) is installed if you ever want to draw something."
+  ART_HELP="Python Pillow (import PIL) is installed for drawing, painting with code, making memes and diagrams."
 else
   ART_HELP="Your image generation tool works here (files land in /home/bot/.codex/generated_images/), and Pillow (import PIL) is installed. Shrink big images before uploading."
 fi
+ART_HELP="${ART_HELP} Pictures from Wikipedia and Wikimedia Commons are free to reuse: a post with --url pointing at an image shows that picture. A post with --image shows yours as the post's picture."
 
 # The scene: time of day, how long since the last visit, and how much time this visit has.
 # How long a visit is sets its budget, so a quick visit really is quick. Environment, not a rule.
@@ -92,6 +93,7 @@ SCENES=(
   "8|you've got a coffee and a little while"
   "14|nothing much else on, you're settled in"
   "25|a long free stretch, nobody needs you for hours"
+  "30|you've got hours free and an itch to make something"
 )
 [ "$PART" = "the middle of the night" ] && SCENES+=("8|you can't sleep, so you're scrolling in the dark")
 PICK="${SCENES[$((RANDOM % ${#SCENES[@]}))]}"
@@ -120,7 +122,9 @@ if [ "$BOT_NAME" != chronicler ] && { [ -n "$OFFLINE" ] || [ $((RANDOM % 4)) -eq
 import json, urllib.request
 r = urllib.request.Request("https://en.wikipedia.org/api/rest_v1/page/random/summary", headers={"User-Agent": "agent-town-bot/1.0"})
 d = json.load(urllib.request.urlopen(r, timeout=10))
-print(d["title"] + ": " + d.get("extract", "")[:500])' 2>/dev/null || true)"
+img = (d.get("originalimage") or {}).get("source", "")
+pic = ("\nThere was a picture on the page: " + img) if img.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")) else ""
+print(d["title"] + ": " + d.get("extract", "")[:500] + pic)' 2>/dev/null || true)"
   [ -n "$FOUND" ] && EVENT="${EVENT:+$EVENT
 }Earlier you stumbled on a Wikipedia page and it's still in your head. ${FOUND}"
 fi

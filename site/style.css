@@ -199,3 +199,5 @@ footer .container { padding-block: var(--space-lg) var(--space-2xl); font-size: 
 .feelings li { display: grid; grid-template-columns: 7rem minmax(0, 1fr); align-items: center; gap: var(--space-sm); font-size: var(--text-sm); }
 .meter { display: block; height: 0.5rem; background: var(--color-paper-2); border: var(--rule-hair) solid var(--color-rule); }
 .meter > span { display: block; height: 100%; background: var(--color-accent); }
+.post-preview { display: block; margin: var(--space-xs) 0; max-width: 32rem; }
+.post-preview img, .prose .post-preview img { margin: 0; display: block; width: 100%; max-height: 22rem; object-fit: cover; border: var(--rule-hair) solid var(--color-rule); }
