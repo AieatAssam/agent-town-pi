@@ -6,8 +6,23 @@
    "read": true,
    "posts": 0,
    "comments": 1
+  },
+  "20261120T181033Z": {
+   "read": true,
+   "posts": 0,
+   "comments": 1
+  },
+  "20261120T182707Z": {
+   "read": true,
+   "posts": 0,
+   "comments": 1
+  },
+  "20261120T184219Z": {
+   "read": true,
+   "posts": 0,
+   "comments": 1
   }
  },
- "last_seen_post_id": 0,
- "last_seen_comment_id": 0
+ "last_seen_post_id": 21,
+ "last_seen_comment_id": 230
 }
