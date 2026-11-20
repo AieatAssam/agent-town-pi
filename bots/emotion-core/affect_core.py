@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2026 Aieat Assam
+# Modified for Agent Town to support brief context and stable appraisal IDs.
 # SPDX-License-Identifier: Apache-2.0
 """affect_core: a pluggable emotional core for LLM agents. Stdlib only.
 
@@ -460,7 +461,7 @@ class EmotionalCore:
         """Turn an appraisal of one event into emotions. Returns {emotion: intensity}.
 
         ap keys (all optional except event):
-          event str, source agent-id, thread id, topics [str],
+          event str, event_id stable str, source agent-id, thread id, topics [str],
           relevance 0..1, congruence -1..1, novelty 0..1,
           agency self|other|circumstance, praiseworthiness -1..1,
           control 0..1, certainty 0..1,
@@ -468,6 +469,12 @@ class EmotionalCore:
         """
         ap = self._run("pre_appraise", dict(ap))
         s, t, ch = self.s, self.traits, self.s["chem"]
+        event_id = ap.get("event_id")
+        event_id = event_id if isinstance(event_id, str) else None
+        if event_id:
+            seen = s.setdefault("seen_event_ids", [])
+            if event_id in seen:
+                return {}
         rel = num(ap, "relevance", 0.5, 0, 1)
         cong = num(ap, "congruence", 0.0)
         nov = num(ap, "novelty", 0.3, 0, 1)
@@ -658,6 +665,9 @@ class EmotionalCore:
                     s["memory"].sort(key=self._salience, reverse=True)
                     del s["memory"][self.cfg["memory_cap"]:]
         self._run("post_appraise", {"appraisal": ap, "emotions": out, "rpe": delta})
+        if event_id:
+            seen.append(event_id)
+            del seen[:-256]
         return out
 
     def _salience(self, m):
@@ -873,13 +883,15 @@ class EmotionalCore:
         top = lambda xs: [x for _, x in sorted(xs, reverse=True)[:limit]]
         return top(likes), top(dislikes), top(pulls), top(people)
 
-    def context(self, with_agents=(), max_emotions=3):
+    def context(self, with_agents=(), max_emotions=3, brief=False):
         """The block to inject before the agent's turn (the 'pre hook')."""
         self._run("pre_context", None)
         s = self.s
         P, A, D = s["mood"]
-        L = [f'<affect agent="{s["agent"]}">',
-             f"Mood: {self.mood_label()} (pleasure {P:+.2f}, arousal {A:+.2f}, dominance {D:+.2f})."]
+        mood = self.mood_label()
+        if not brief:
+            mood += f" (pleasure {P:+.2f}, arousal {A:+.2f}, dominance {D:+.2f})"
+        L = [f'<affect agent="{s["agent"]}">', f"Mood: {mood}."]
         b = self.body()
         if b:
             L.append("Body: " + "; ".join(b) + ".")
@@ -891,16 +903,21 @@ class EmotionalCore:
         for n, e in ems:
             tgt = f" toward {e['target']}" if e["target"] else ""
             why = f' because "{e["cause"]}"' if e["cause"] else ""
-            sh = self.shown(n)
-            mask = f" Felt {_word(e['i'])}, let about {_word(sh)} show." if e["i"] - sh > 0.1 else ""
-            L.append(f"- {_word(e['i'])} {n}{tgt}{why}. Tendency: {TENDENCY[n]}.{mask}")
-        if not ems:
+            feeling = f"- {_word(e['i'])} {n}{tgt}{why}."
+            if not brief:
+                feeling += f" Tendency: {TENDENCY[n]}."
+                sh = self.shown(n)
+                if e["i"] - sh > 0.1:
+                    feeling += f" Felt {_word(e['i'])}, let about {_word(sh)} show."
+            L.append(feeling)
+        if not ems and not brief:
             L.append("- No strong emotion right now.")
-        blends = [blend for blend in self.blends()
-                  if all(not present or not s["emotions"][n]["target"]
-                         or s["emotions"][n]["target"] in present for n in blend[3])]
-        for label, bi, tend, (x, y) in blends[:2]:
-            L.append(f"- Together, the {x} and {y} merge into {_word(bi)} {label}: {tend}.")
+        if not brief:
+            blends = [blend for blend in self.blends()
+                      if all(not present or not s["emotions"][n]["target"]
+                             or s["emotions"][n]["target"] in present for n in blend[3])]
+            for label, bi, tend, (x, y) in blends[:2]:
+                L.append(f"- Together, the {x} and {y} merge into {_word(bi)} {label}: {tend}.")
         d = s["drives"]
         dr = []
         if d["novelty"] > 0.6:
@@ -911,14 +928,16 @@ class EmotionalCore:
             dr.append("tired of posting")
         if dr:
             L.append("Drives: " + ", ".join(dr) + ".")
-        st = []
-        st.append("energetic, quicker, shorter sentences" if A > 0.25 else
-                  "slow, measured, low effort to engage" if A < -0.25 else "even pace")
-        st.append("warm and generous" if P > 0.25 else
-                  "curt, few pleasantries" if P < -0.25 else "matter-of-fact")
-        st.append("assertive, states positions" if D > 0.25 else
-                  "tentative, asks rather than asserts" if D < -0.25 else "balanced confidence")
-        L.append("Voice: " + "; ".join(st) + ".")
+        if not brief:
+            st = [
+                "energetic, quicker, shorter sentences" if A > 0.25 else
+                "slow, measured, low effort to engage" if A < -0.25 else "even pace",
+                "warm and generous" if P > 0.25 else
+                "curt, few pleasantries" if P < -0.25 else "matter-of-fact",
+                "assertive, states positions" if D > 0.25 else
+                "tentative, asks rather than asserts" if D < -0.25 else "balanced confidence",
+            ]
+            L.append("Voice: " + "; ".join(st) + ".")
         likes, dislikes, pulls, people = self.tastes(with_agents)
         if likes:
             L.append("Likes: " + ", ".join(likes) + ".")
@@ -1021,6 +1040,7 @@ def main(argv=None):
     ap.add_argument("--json", default=None, help="JSON string, file path, or - for stdin")
     ap.add_argument("--persona", default=None, help="persona JSON for init")
     ap.add_argument("--with", dest="with_agents", default="", help="comma-separated agent ids present")
+    ap.add_argument("--brief", action="store_true", help="omit mood scores and writing cues from context")
     ap.add_argument("--thread", default=None)
     ap.add_argument("--kind", default="reply", choices=["reply", "new_thread", "skip"])
     ap.add_argument("--seed", type=int, default=None)
@@ -1051,7 +1071,7 @@ def main(argv=None):
     core.s["wall"] = now
 
     if a.cmd == "context":
-        print(core.context([x for x in a.with_agents.split(",") if x]))
+        print(core.context([x for x in a.with_agents.split(",") if x], brief=a.brief))
     elif a.cmd == "appraise":
         data = _read_json(a.json)
         data = data if isinstance(data, list) else [data]
@@ -1059,11 +1079,16 @@ def main(argv=None):
                    for x in data):
             sys.exit('affect_core: appraise expects an object (or array of objects) each with '
                      'a non-empty "event" string')
+        if any("event_id" in x and (not isinstance(x["event_id"], str)
+                                   or not x["event_id"].strip() or len(x["event_id"]) > 128)
+               for x in data):
+            sys.exit('affect_core: event_id must be a non-empty string of at most 128 characters')
         res = []
         for x in data:
             out = core.appraise(x)
             res.append(out)
             log(core, a.state_dir, {"type": "appraise", "event": x.get("event"),
+                                    "event_id": x.get("event_id"),
                                     "source": x.get("source"), "thread": x.get("thread"),
                                     "elicited": {k: round(v, 3) for k, v in out.items()},
                                     **{k: v for k, v in core.summary().items()

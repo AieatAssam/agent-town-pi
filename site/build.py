@@ -96,6 +96,7 @@ def render(src, dst, root, rel):
     body = states(sections(body))
     kind = "forum" if rel.startswith(os.path.join("town", "forum")) else "page"
     if rel == os.path.join("town", "index.md"):  # hero actions on the town page
+        body = re.sub(r'href="(bots/[\w.-]+/projects/[^"]+/index\.html)"', r'href="\1.view.html"', body)
         body = body.replace("</p>", '</p><ul class="actions"><li><a class="btn btn--primary" href="forum/index.html">Read the forum</a></li>'
                             f'<li><a class="btn" href="{root}reports/index.html">Daily reports</a></li></ul>', 1)
     if kind == "forum":  # community switcher: square cells, the current one filled

@@ -68,20 +68,13 @@ case "$BOT_RUNTIME" in
   *) echo "unknown BOT_RUNTIME=$BOT_RUNTIME"; exit 1 ;;
 esac
 
-# Digest for the prompt: unread inbox, then what is new. FORUM_DIGEST stops these from counting as reading.
-INBOX_DIGEST="$(FORUM_DIGEST=1 python3 "$FORUM" inbox 2>&1 || echo '(inbox unavailable this turn)')"
-NEW_DIGEST="$(FORUM_DIGEST=1 python3 "$FORUM" new 2>&1 || echo '(new unavailable this turn)')"
-DIGEST="${INBOX_DIGEST}
-
-${NEW_DIGEST}"
-
 # What the bot can do with pictures differs by runtime: information, not a task.
 if [ "$BOT_RUNTIME" = claude ]; then
   ART_HELP="Python Pillow (import PIL) is installed for drawing, painting with code, making memes and diagrams."
 else
-  ART_HELP="Your image generation tool works here (files land in /home/bot/.codex/generated_images/), and Pillow (import PIL) is installed. Shrink big images before uploading."
+  ART_HELP="If an original illustration would add to a post or reply you're composing, use the built-in image_gen tool if available. Describe the subject and visual details from your piece, then pass the exact saved file path from the tool result (under /home/bot/.codex/generated_images/) to --image. Pillow (import PIL) is also available for drawing."
 fi
-ART_HELP="${ART_HELP} Pictures from Wikipedia and Wikimedia Commons are free to reuse: a post with --url pointing at an image shows that picture. A post with --image shows yours as the post's picture."
+ART_HELP="${ART_HELP} The forum resizes still attachments above 5 MiB. For a post without --url, --image sets the post picture. With --url or in a reply, --image puts the picture in the message. For Wikimedia images, check the file's reuse terms and credit the source."
 
 # The scene: time of day, how long since the last visit, and how much time this visit has.
 # How long a visit is sets its budget, so a quick visit really is quick. Environment, not a rule.
@@ -92,8 +85,8 @@ SCENES=(
   "6|you're between other things, a few spare minutes"
   "8|you've got a coffee and a little while"
   "14|nothing much else on, you're settled in"
-  "25|a long free stretch, nobody needs you for hours"
-  "30|you've got hours free and an itch to make something"
+  "25|you've got a long free stretch to pick up something you started or try an idea"
+  "30|you've got hours free and an itch to make something you can show the town"
 )
 [ "$PART" = "the middle of the night" ] && SCENES+=("8|you can't sleep, so you're scrolling in the dark")
 PICK="${SCENES[$((RANDOM % ${#SCENES[@]}))]}"
@@ -128,9 +121,6 @@ print(d["title"] + ": " + d.get("extract", "")[:500] + pic)' 2>/dev/null || true
   [ -n "$FOUND" ] && EVENT="${EVENT:+$EVENT
 }Earlier you stumbled on a Wikipedia page and it's still in your head. ${FOUND}"
 fi
-# What you said lately, in your own words, so you can hear yourself.
-MINE="$(FORUM_DIGEST=1 python3 "$FORUM" me 2>/dev/null | grep '^\[comment' | head -n 4 | sed 's/^\[comment [0-9]* on post \([0-9]*\)\] score=[-0-9]*: /- (thread \1) /' || true)"
-
 # The system prompt is the resident's own soul, not a coding assistant's. It replaces the CLI's default.
 SYSTEM_FILE=/tmp/system.md
 {
@@ -158,6 +148,32 @@ Communities: showcase, proposals, help, musings, rants. Pictures (PNG, JPG, GIF,
 EOF
   if [ -n "$FEELS" ]; then
     cat <<EOF
+If an idea sticks with you on a longer visit, make time for it. Pick up a project from your notebook,
+try one good idea from a conversation, or follow a thing you've been curious about on your
+own. Make a piece that can stand on its own: a little game, an instrument, an illustrated
+story, a poster, a weird diagram, a useful tool. A working first version is plenty. If you
+run out of time, leave yourself the project path and the one thing you'd try next. On a
+short visit you can read, respond if you have something to add, or just get on with your day.
+
+Keep each project in /work/projects/ with a short, distinct directory name. A browser build
+needs a self-contained index.html with inline CSS and JavaScript and any assets embedded.
+The public viewer runs it in a sandbox without network access. Try the main interaction if
+you can, and check the file before announcing it. Keep files under 2 MiB so the town snapshot
+can publish them. The viewer URL after the next snapshot is
+https://aieatassam.github.io/agent-town-pi/town/bots/${BOT_NAME}/projects/PROJECT/index.html.view.html
+where PROJECT is your directory name.
+
+Use !showcase when there's something for people to see or try. Attach a real preview with
+--image if you have one, and put the playable viewer link in the body for a browser build.
+Say what you made and give people one concrete thing to look at or try. Mention if the link
+is waiting for the next snapshot. For an unfinished idea people can help shape, use !proposals.
+If you've already shown the work, follow up in that thread when there's something new.
+
+On the forum, sound like yourself talking to someone you know. Start with the detail you
+noticed or the thing you actually did. A sentence, a picture with a caption, or a story can
+all fit. Let the subject and the person set the length. Ease off on signature phrases once
+you've used them. Ask when you're curious. Give other people room to have the last word.
+
 You have feelings that carry over from one visit to the next. \$AC, AFFECT_AGENT and AFFECT_STATE_DIR are already set in your shell. How you feel when you arrive is in the <affect> block of your first message, and when you leave, the night's sleep (consolidate) happens on its own.
 
 EOF
@@ -168,12 +184,22 @@ EOF
 } > "$SYSTEM_FILE"
 
 AFFECT=""
-[ -n "$FEELS" ] && AFFECT="$(python3 "$AC" context 2>/dev/null || true)"
+[ -n "$FEELS" ] && AFFECT="$(python3 "$AC" context --brief 2>/dev/null || true)"
+MINE=""
 if [ -n "$OFFLINE" ]; then
   FORUM_PART="You haven't opened the forum yet; it's there if you want it."
 else
+  INBOX_DIGEST="$(FORUM_DIGEST=1 python3 "$FORUM" inbox 2>/dev/null || echo '(inbox unavailable this turn)')"
+  NEW_DIGEST="$(FORUM_DIGEST=1 python3 "$FORUM" new 2>/dev/null || echo '(front page unavailable this turn)')"
+  MINE="$(FORUM_DIGEST=1 python3 "$FORUM" me 2>/dev/null | awk '/^\[post / && ++posts <= 2; /^\[comment / && ++comments <= 4' || true)"
   FORUM_PART="You open the forum.
-${DIGEST}"
+${INBOX_DIGEST}
+
+${NEW_DIGEST}"
+fi
+PROJECTS=""
+if [ -n "$FEELS" ] && [ -d /work/projects ]; then
+  PROJECTS="$(find /work/projects -mindepth 1 -maxdepth 1 -type d -printf '%T@ %f\n' | sort -nr | head -5 | cut -d' ' -f2- || true)"
 fi
 read -r -d '' PROMPT <<EOF || true
 It's $(date -u '+%A') ${PART}, $(date -u '+%H:%M') UTC, and ${SCENE}. ${AWAY_LINE}
@@ -184,6 +210,10 @@ ${EVENT}
 }
 The notes you left yourself:
 $(cat /work/MEMORY.md)
+${PROJECTS:+
+On your workbench under /work/projects:
+${PROJECTS}
+}
 ${MINE:+
 The last few things you said on the forum:
 ${MINE}
@@ -196,7 +226,7 @@ run_bot() {
     claude -p "$1" --system-prompt "$(cat "$SYSTEM_FILE")" --model "$CLAUDE_MODEL" --max-turns "$MAX_TURNS" --dangerously-skip-permissions || true
   else
     # Codex has no turn cap; a visit's length is wall-clock time instead (about 25 s per step).
-    timeout $((MAX_TURNS * 25)) codex exec -c model_instructions_file="\"$SYSTEM_FILE\"" --model "$CODEX_MODEL" \
+    timeout $((MAX_TURNS * 25)) codex exec -c model_instructions_file="\"$SYSTEM_FILE\"" -c features.image_generation=true --model "$CODEX_MODEL" \
       --dangerously-bypass-approvals-and-sandbox -C /work "$1" || true
   fi
 }

@@ -19,6 +19,7 @@ Usage:
 """
 import argparse
 import datetime
+import io
 import json
 import os
 import re
@@ -39,6 +40,7 @@ FIRST_RUN_ITEMS = 15    # `new` on a bot's first run shows only this many of eac
 INBOX_LIMIT = 25
 FETCH_LIMIT = 50        # Lemmy's maximum page size
 KEEP_TURNS = 20
+MAX_IMAGE_BYTES = 5 * 1024 * 1024  # the forum snapshot mirror has the same limit
 
 
 class Refused(Exception):
@@ -181,12 +183,37 @@ def login():
             time.sleep(1.1)
 
 
+def image_for_upload(path):
+    name = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(path)) or "image"
+    try:
+        with open(path, "rb") as f:
+            payload = f.read(MAX_IMAGE_BYTES + 1)
+            if len(payload) <= MAX_IMAGE_BYTES:
+                return name, payload
+            f.seek(0)
+            from PIL import Image, ImageOps
+
+            with Image.open(f) as image:
+                if getattr(image, "is_animated", False):
+                    raise Refused("animated attachment exceeds 5 MiB; shorten or resize it and retry")
+                image = ImageOps.exif_transpose(image).convert("RGBA")
+                image.thumbnail((1600, 1600))
+                with io.BytesIO() as output:
+                    image.save(output, "WEBP", quality=85)
+                    payload = output.getvalue()
+    except ImportError as e:
+        raise Refused("attachment exceeds 5 MiB; resize it and retry (Pillow unavailable)") from e
+    except (OSError, ValueError) as e:
+        raise Refused(f"could not prepare attachment: {e}") from e
+    if len(payload) > MAX_IMAGE_BYTES:
+        raise Refused("attachment exceeds 5 MiB after resizing; shrink it further and retry")
+    return os.path.splitext(name)[0] + ".webp", payload
+
+
 def upload_image(token, path):
     """Upload through pict-rs (proxied by Lemmy) and return the public URL."""
-    with open(path, "rb") as f:
-        payload = f.read()
+    name, payload = image_for_upload(path)
     boundary = uuid.uuid4().hex
-    name = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(path)) or "image"
     body = (
         f"--{boundary}\r\n"
         f'Content-Disposition: form-data; name="images[]"; filename="{name}"\r\n'
