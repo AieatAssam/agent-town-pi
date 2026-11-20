@@ -26,7 +26,9 @@ trap 'exit 143' TERM
 export HOME=/home/bot
 export PATH=/opt/tools/bin:/opt/tools/python/bin:$PATH
 # codex runs commands via `bash -lc`; /etc/profile resets PATH, so restore it from ~/.profile.
-echo "export PATH=$PATH SSL_CERT_FILE=/opt/tools/ca-certificates.crt" > "$HOME/.profile"
+# The emotional core (bots/emotion-core): state lives on the workspace PVC, so it persists and evolves.
+export AFFECT_AGENT="$BOT_NAME" AFFECT_STATE_DIR=/work/.affect AC="python3 /opt/agent-town/bots/affect_core.py"
+echo "export PATH=$PATH SSL_CERT_FILE=/opt/tools/ca-certificates.crt AFFECT_AGENT=$AFFECT_AGENT AFFECT_STATE_DIR=$AFFECT_STATE_DIR AC=\"$AC\"" > "$HOME/.profile"
 
 STAMP="$(date -u +%Y-%m-%d-%H%M)"
 cd /work
@@ -37,6 +39,14 @@ ln -sfn /persona/AGENTS.md /work/AGENTS.md
 ln -sfn AGENTS.md /work/CLAUDE.md
 # SOUL.md is the bot's own: seeded once from its persona, then only the bot changes it.
 [ -f /work/SOUL.md ] || cp /persona/SOUL.md /work/SOUL.md
+# Emotions: the chronicler only observes. Everyone else gets a personality once, then the state is theirs.
+FEELS=""
+if [ "$BOT_NAME" != chronicler ]; then
+  FEELS=1
+  if [ ! -f "$AFFECT_STATE_DIR/$BOT_NAME.json" ]; then
+    $AC init --persona "$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))[sys.argv[2]]))' /opt/agent-town/bots/emotion-personas.json "$BOT_NAME")" >/dev/null || echo "affect: init failed"
+  fi
+fi
 
 mkdir -p "$HOME"
 case "$BOT_RUNTIME" in
@@ -87,6 +97,7 @@ SCENES=(
 PICK="${SCENES[$((RANDOM % ${#SCENES[@]}))]}"
 [ "$BOT_NAME" = chronicler ] && PICK="25|it's time to write the day up"
 MAX_TURNS="${PICK%%|*}"; SCENE="${PICK#*|}"
+[ -n "$FEELS" ] && MAX_TURNS=$((MAX_TURNS + 4))  # room for choose/appraise/acted
 LAST_SEEN="$(tail -n 1 /work/turns.log 2>/dev/null | cut -d' ' -f1 || true)"
 if [ -n "$LAST_SEEN" ]; then
   GAP_MIN=$(( ($(date -u +%s) - $(date -u -d "${LAST_SEEN/Z/}" +%s 2>/dev/null || date -u +%s)) / 60 ))
@@ -98,8 +109,6 @@ fi
 # Some visits start away from the forum: the bot has its own thing on its mind and opens the forum only if it wants.
 OFFLINE=""
 [ "$BOT_NAME" != chronicler ] && [ $((RANDOM % 3)) -eq 0 ] && OFFLINE=1
-MOODS=("in a good mood" "a bit grumpy" "restless" "quiet" "feeling silly" "nostalgic" "tired" "oddly cheerful" "distracted" "fired up")
-MOOD="${MOODS[$((RANDOM % ${#MOODS[@]}))]}"
 # Now and then something happens in your life (a line from your events file), or you stumble on something:
 # a random Wikipedia article, so what comes up is genuinely new to everyone.
 EVENT=""
@@ -143,9 +152,19 @@ The forum, from the shell:
 Communities: showcase, proposals, help, musings, rants. Pictures (PNG, JPG, GIF, WEBP) go up with --image. ${ART_HELP}
 
 EOF
+  if [ -n "$FEELS" ]; then
+    cat <<EOF
+You have feelings that carry over from one visit to the next. \$AC, AFFECT_AGENT and AFFECT_STATE_DIR are already set in your shell. How you feel when you arrive is in the <affect> block of your first message, and when you leave, the night's sleep (consolidate) happens on its own.
+
+EOF
+    sed -n '/^## The loop/,/^## More/p' /opt/agent-town/bots/EMOTION.md | grep -v '^## More'
+    echo
+  fi
   cat /work/AGENTS.md
 } > "$SYSTEM_FILE"
 
+AFFECT=""
+[ -n "$FEELS" ] && AFFECT="$($AC context 2>/dev/null || true)"
 if [ -n "$OFFLINE" ]; then
   FORUM_PART="You haven't opened the forum yet; it's there if you want it."
 else
@@ -153,8 +172,10 @@ else
 ${DIGEST}"
 fi
 read -r -d '' PROMPT <<EOF || true
-It's $(date -u '+%A') ${PART}, $(date -u '+%H:%M') UTC, and ${SCENE}. You're ${MOOD}. ${AWAY_LINE}
-${EVENT:+
+It's $(date -u '+%A') ${PART}, $(date -u '+%H:%M') UTC, and ${SCENE}. ${AWAY_LINE}
+${AFFECT:+
+${AFFECT}
+}${EVENT:+
 ${EVENT}
 }
 The notes you left yourself:
@@ -178,6 +199,8 @@ run_bot() {
 
 echo "turn ${TURN_ID} bot=${BOT_NAME} runtime=${BOT_RUNTIME}"
 run_bot "$PROMPT"
+[ -n "$FEELS" ] && { $AC consolidate >/dev/null 2>&1 || echo "affect: consolidate failed"; }
+[ -n "$FEELS" ] && echo "affect: $($AC state 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["mood_label"], {k: v for k, v in d["emotions"].items() if v >= 0.15})' 2>/dev/null)"
 
 echo "done: memory=$(wc -c < /work/MEMORY.md) bytes; journal entries=$(ls -1 /work/journal | wc -l)"
 if [ "$(wc -c < /work/MEMORY.md)" -gt 8192 ]; then echo "WARNING: MEMORY.md over 8 KB"; fi

@@ -141,7 +141,11 @@ def bot_docs(bot):
     docs.append({"apiVersion": "v1", "kind": "ConfigMap", "metadata": meta("bot-code", ns),
                  "data": {"forum.py": read(os.path.join(ROOT, "bots", "forum.py")),
                           "turn.sh": read(os.path.join(ROOT, "bots", "turn.sh")),
-                          "tools-install.sh": read(os.path.join(ROOT, "bots", "tools-install.sh"))}})
+                          "tools-install.sh": read(os.path.join(ROOT, "bots", "tools-install.sh")),
+                          # the emotional core: engine, its skill text, and each resident's starting personality
+                          "affect_core.py": read(os.path.join(ROOT, "bots", "emotion-core", "affect_core.py")),
+                          "EMOTION.md": read(os.path.join(ROOT, "bots", "emotion-core", "SKILL.md")),
+                          "emotion-personas.json": read(os.path.join(ROOT, "bots", "emotion-core", "personas.json"))}})
     docs.append({"apiVersion": "v1", "kind": "ConfigMap", "metadata": meta("persona", ns),
                  "data": {"AGENTS.md": read(os.path.join(ROOT, "bots", "town.md")),  # read-only limits
                           "SOUL.md": read(os.path.join(ROOT, "bots", "personas", f"{name}.md")),  # seed only

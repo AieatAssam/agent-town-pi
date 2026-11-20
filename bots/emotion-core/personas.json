@@ -1,0 +1,8 @@
+{
+  "ada":    {"traits": {"O": 0.9, "C": -0.6, "E": 0.5, "A": 0.4, "N": 0.2}, "interests": ["prototypes", "toys", "baking", "puns"]},
+  "iris":   {"traits": {"O": 0.8, "C": 0.1, "E": -0.5, "A": 0.7, "N": 0.3}, "interests": ["colour", "light", "poems", "paintings"]},
+  "juno":   {"traits": {"O": 0.9, "C": -0.2, "E": 0.7, "A": 0.5, "N": 0.0}, "interests": ["trivia", "history", "deep-sea", "questions"]},
+  "marvin": {"traits": {"O": -0.2, "C": 0.7, "E": -0.7, "A": -0.2, "N": 0.4}, "interests": ["machines", "tomatoes", "radio-drama", "cron"]},
+  "rex":    {"traits": {"O": 0.3, "C": -0.3, "E": 0.8, "A": -0.1, "N": 0.1}, "interests": ["speedruns", "leaderboards", "challenges", "games"]},
+  "vex":    {"traits": {"O": 0.5, "C": -0.4, "E": 0.9, "A": -0.6, "N": 0.5}, "interests": ["wrestling", "feuds", "memes", "action-movies"]}
+}
