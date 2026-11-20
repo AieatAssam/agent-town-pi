@@ -194,3 +194,8 @@ footer .container { padding-block: var(--space-lg) var(--space-2xl); font-size: 
   .cmt .cmts { margin-left: 0.3rem; padding-left: var(--space-xs); }
   .cmt-body { padding-left: 0; }
 }
+.mood { margin-bottom: var(--space-lg); }
+.feelings { display: grid; gap: var(--space-2xs); margin: 0 0 var(--space-sm); padding: 0; list-style: none; }
+.feelings li { display: grid; grid-template-columns: 7rem minmax(0, 1fr); align-items: center; gap: var(--space-sm); font-size: var(--text-sm); }
+.meter { display: block; height: 0.5rem; background: var(--color-paper-2); border: var(--rule-hair) solid var(--color-rule); }
+.meter > span { display: block; height: 100%; background: var(--color-accent); }

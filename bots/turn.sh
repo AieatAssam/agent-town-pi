@@ -27,8 +27,8 @@ export HOME=/home/bot
 export PATH=/opt/tools/bin:/opt/tools/python/bin:$PATH
 # codex runs commands via `bash -lc`; /etc/profile resets PATH, so restore it from ~/.profile.
 # The emotional core (bots/emotion-core): state lives on the workspace PVC, so it persists and evolves.
-export AFFECT_AGENT="$BOT_NAME" AFFECT_STATE_DIR=/work/.affect AC="python3 /opt/agent-town/bots/affect_core.py"
-echo "export PATH=$PATH SSL_CERT_FILE=/opt/tools/ca-certificates.crt AFFECT_AGENT=$AFFECT_AGENT AFFECT_STATE_DIR=$AFFECT_STATE_DIR AC=\"$AC\"" > "$HOME/.profile"
+export AFFECT_AGENT="$BOT_NAME" AFFECT_STATE_DIR=/work/.affect AC=/opt/agent-town/bots/affect_core.py
+echo "export PATH=$PATH SSL_CERT_FILE=/opt/tools/ca-certificates.crt AFFECT_AGENT=$AFFECT_AGENT AFFECT_STATE_DIR=$AFFECT_STATE_DIR AC=$AC" > "$HOME/.profile"
 
 STAMP="$(date -u +%Y-%m-%d-%H%M)"
 cd /work
@@ -44,7 +44,7 @@ FEELS=""
 if [ "$BOT_NAME" != chronicler ]; then
   FEELS=1
   if [ ! -f "$AFFECT_STATE_DIR/$BOT_NAME.json" ]; then
-    $AC init --persona "$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))[sys.argv[2]]))' /opt/agent-town/bots/emotion-personas.json "$BOT_NAME")" >/dev/null || echo "affect: init failed"
+    python3 "$AC" init --persona "$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))[sys.argv[2]]))' /opt/agent-town/bots/emotion-personas.json "$BOT_NAME")" >/dev/null || echo "affect: init failed"
   fi
 fi
 
@@ -164,7 +164,7 @@ EOF
 } > "$SYSTEM_FILE"
 
 AFFECT=""
-[ -n "$FEELS" ] && AFFECT="$($AC context 2>/dev/null || true)"
+[ -n "$FEELS" ] && AFFECT="$(python3 "$AC" context 2>/dev/null || true)"
 if [ -n "$OFFLINE" ]; then
   FORUM_PART="You haven't opened the forum yet; it's there if you want it."
 else
@@ -199,8 +199,18 @@ run_bot() {
 
 echo "turn ${TURN_ID} bot=${BOT_NAME} runtime=${BOT_RUNTIME}"
 run_bot "$PROMPT"
-[ -n "$FEELS" ] && { $AC consolidate >/dev/null 2>&1 || echo "affect: consolidate failed"; }
-[ -n "$FEELS" ] && echo "affect: $($AC state 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["mood_label"], {k: v for k, v in d["emotions"].items() if v >= 0.15})' 2>/dev/null)"
+if [ -n "$FEELS" ]; then
+  python3 "$AC" consolidate >/dev/null 2>&1 || echo "affect: consolidate failed"
+  # The state folder stays private (it is not synced); only this public summary of the mood is.
+  python3 "$AC" state 2>/dev/null | python3 -c '
+import json, sys, time
+d = json.load(sys.stdin)
+out = {"mood": d["mood_label"], "pad": d["mood"], "updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+       "emotions": {k: v for k, v in sorted(d["emotions"].items(), key=lambda kv: -kv[1]) if v >= 0.15},
+       "blends": {k: v for k, v in d["blends"].items() if v >= 0.15}}
+json.dump(out, open("/work/mood.json", "w"), indent=1)
+print("affect:", out["mood"], out["emotions"])' || echo "affect: state failed"
+fi
 
 echo "done: memory=$(wc -c < /work/MEMORY.md) bytes; journal entries=$(ls -1 /work/journal | wc -l)"
 if [ "$(wc -c < /work/MEMORY.md)" -gt 8192 ]; then echo "WARNING: MEMORY.md over 8 KB"; fi

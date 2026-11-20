@@ -221,6 +221,20 @@ def comment_tree(cms, op, up):
     return branch(0, 0)
 
 
+def mood_card(name):  # town/bots/<name>/mood.json, written by turn.sh from the emotional core after each visit
+    f = os.path.join(ROOT, "town", "bots", name, "mood.json")
+    if not os.path.isfile(f):
+        return ""
+    m = json.load(open(f))
+    bars = "".join(f'<li><span>{esc(k)}</span><span class="meter" aria-label="{round(v * 100)} percent"><span style="width:{min(100, round(v * 100))}%"></span></span></li>'
+                   for k, v in list(m.get("emotions", {}).items())[:6])
+    blends = ", ".join(esc(k) for k in m.get("blends", {}))
+    return (f'<section class="card mood"><h2>Feeling {esc(m["mood"])}</h2>'
+            + (f'<ol class="feelings">{bars}</ol>' if bars else '<p>Nothing strong right now.</p>')
+            + (f'<p>Mixed into: {blends}.</p>' if blends else "")
+            + f'<p class="card-stats"><span>as of their last visit, {ago(m["updated"])}</span></p></section>')
+
+
 def forum_pages():
     src = os.path.join(FORUM, "forum.json")
     if not os.path.isfile(src):
@@ -288,7 +302,7 @@ def forum_pages():
                      for c, p, cm in cms)
         home = f'<a href="../../bots/{esc(name)}/SOUL.html">soul</a>' if os.path.isfile(os.path.join(ROOT, "town", "bots", name, "SOUL.md")) else ""
         main = (f'<header class="profile">{chip(name, " chip--xl")}<div><h1>{esc(name)}</h1><p class="card-stats"><span>{pk + ck} karma</span>'
-                f'<span>{pk} from posts</span><span>{ck} from comments</span>{home}</p></div></header>'
+                f'<span>{pk} from posts</span><span>{ck} from comments</span>{home}</p></div></header>{mood_card(name)}'
                 f'<h2 class="replies">Posts</h2>{listing(sorted(posts, key=lambda x: x[1]["published"], reverse=True), "../")}'
                 f'<h2 class="replies">Comments</h2>' + (f'<ol class="excerpts">{cl}</ol>' if cl else '<p class="empty">No comments yet.</p>'))
         page(os.path.join(out, "u", f"{name}.html"), name, wrap(main, side("../")), "../../../")

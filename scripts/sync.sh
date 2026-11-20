@@ -17,7 +17,7 @@ rm -rf town/bots && mkdir -p town/bots reports
 for d in $(on_pi "ls $STORE" | grep '_bot-.*_workspace$'); do
   bot=${d#*_bot-}; bot=${bot%_workspace}
   mkdir -p "town/bots/$bot"
-  on_pi "tar -C $STORE/$d --exclude=AGENTS.md --exclude=CLAUDE.md --exclude=node_modules --exclude=.cache --exclude=.git --exclude=__pycache__ --exclude=*.pyc -czf - ." \
+  on_pi "tar -C $STORE/$d --exclude=AGENTS.md --exclude=.affect --exclude=CLAUDE.md --exclude=node_modules --exclude=.cache --exclude=.git --exclude=__pycache__ --exclude=*.pyc -czf - ." \
     | tar -xzf - -C "town/bots/$bot"
   [ -d "town/bots/$bot/reports" ] && cp -R "town/bots/$bot/reports/." reports/
 done

@@ -156,6 +156,7 @@ DEFAULTS = {
     "liking_half_life": 1440.0,   # hours (60 days); dislikes fade 2x slower
     "wanting_half_life": 336.0,   # hours (14 days)
     "exposure_half_life": 12.0,   # hours, spontaneous recovery from habituation
+    "emotion_adaptation_half_life": 1.0,  # hours, recovery from repeated emotional stimulation
     "memory_half_life": 72.0,     # hours, salience decay of emotional memories
     "sleep_gap": 6.0,             # an idle gap this long consolidates the day
     "memory_cap": 30,
@@ -400,9 +401,8 @@ class EmotionalCore:
             tau = c["opponent_tau"] * (1.0 if growing else 2.0)
             s["opp"] += (a - s["opp"]) * (1 - math.exp(-h / tau))
             after = s["opp"] - a if (not growing and a * s["opp"] >= 0) else 0.0
-            # 4. mood: pulled toward the centre of active emotions; pushed
-            #    further if already past it in the same octant (ALMA pull/push);
-            #    otherwise relaxes to a set point shifted by neurochemistry.
+            # 4. Mood is drawn toward the active emotional centre. The ALMA
+            #    same-octant push has limited reach so sustained input settles.
             S = min(1.0, tot)
             m = s["mood"]
             if tot > 0:
@@ -413,7 +413,10 @@ class EmotionalCore:
                 beyond = sum(x * x for x in m) > sum(x * x for x in cen)
                 for i in range(3):
                     if same and beyond:
-                        m[i] += k_ * S * 0.3 * cen[i]
+                        push_limit = clamp(1.3 * cen[i])
+                        remaining = push_limit - m[i]
+                        if remaining * cen[i] > 0:
+                            m[i] += k_ * S * remaining
                     else:
                         m[i] += k_ * S * (cen[i] - m[i])
             d = {k: self.dev(k) for k in CHEM}
@@ -441,6 +444,14 @@ class EmotionalCore:
             rec["W"] *= 0.5 ** (hours / c["wanting_half_life"])
         for th in s["threads"].values():
             th["exposure"] *= 0.5 ** (hours / c["exposure_half_life"])
+        adaptation = s.get("emotion_adaptation", {})
+        recovery = 0.5 ** (hours / c["emotion_adaptation_half_life"])
+        for name, level in list(adaptation.items()):
+            remaining = level * recovery
+            if remaining < 0.01:
+                del adaptation[name]
+            else:
+                adaptation[name] = remaining
         s["t"] += hours
         self._run("post_advance", hours)
 
@@ -485,14 +496,17 @@ class EmotionalCore:
         if cert >= 0.7:
             if cong > 0:
                 add("joy", rel * cong * amp)
-                if self.intensity("fear") > 0.3:
-                    add("relief", self.intensity("fear") * cong)
-                    s["emotions"]["fear"]["i"] *= 0.4
             elif cong < 0:
                 add("distress", rel * -cong * (1 - 0.4 * control) * amp)
-                if self.intensity("hope") > 0.3:
-                    add("disappointment", self.intensity("hope") * -cong)
-                    s["emotions"]["hope"]["i"] *= 0.4
+            resolution = rel * abs(cong)
+            if resolution > 0.03:
+                for name, disconfirmed in (("fear", "relief"), ("hope", "disappointment")):
+                    prospect = s["emotions"].get(name)
+                    if not prospect or (prospect.get("thread") and prospect["thread"] != th):
+                        continue
+                    if prospect["i"] > 0.3 and (cong > 0) == (name == "fear"):
+                        add(disconfirmed, prospect["i"] * resolution)
+                    prospect["i"] *= 1 - 0.6 * resolution
         else:
             if cong > 0:
                 add("hope", rel * cong)
@@ -536,7 +550,7 @@ class EmotionalCore:
                 g *= 1 + 0.8 * low_sht               # low serotonin, short fuse
             x = out[name] * max(0.0, g)
             # Stacked gains saturate softly instead of pinning at the ceiling.
-            out[name] = x if x <= 0.6 else 0.6 + 0.4 * math.tanh((x - 0.6) / 0.4)
+            out[name] = x if x <= 0.6 else 0.6 + 0.3 * math.tanh((x - 0.6) / 0.3)
         # Boredom does not coexist with being strongly moved by something.
         if "boredom" in out:
             out["boredom"] *= 1 - max((v for k, v in out.items() if k != "boredom"), default=0.0)
@@ -559,18 +573,34 @@ class EmotionalCore:
             if opp:
                 s["emotions"][dn]["i"] *= 1 - 0.3 * max(out[n] for n in opp)
 
-        # Blend into state: intensities saturate rather than add.
+        # Rapid sequences that evoke the same emotion lose force across
+        # sources and topics. Recovery follows elapsed time.
+        adaptation = s.setdefault("emotion_adaptation", {})
+        for name, x in out.items():
+            level = adaptation.get(name, 0.0)
+            out[name] = x * (1 - 0.45 * level)
+            adaptation[name] = level + (1 - level) * 0.25 * x
+
+        # Reinforcement approaches a ceiling set by the strength of the new
+        # stimulus. A stronger existing emotion still decays on its own clock.
         cause = str(ap.get("event", ""))[:140]
         for name, x in out.items():
             e = s["emotions"].setdefault(name, {"i": 0.0, "target": None, "cause": ""})
-            if x >= 0.5 * e["i"]:
-                # Only emotions about someone's conduct are directed at them.
-                directed = name in ("anger", "reproach", "admiration", "gratitude")
-                e["target"], e["cause"] = (src if directed else None), cause
-            e["i"] = 1 - (1 - e["i"]) * (1 - x)
+            directed = name in ("anger", "reproach", "admiration", "gratitude")
+            target = src if directed else None
+            same_subject = e.get("thread") == th and e["target"] == target
+            if x >= e["i"] or (same_subject and x >= 0.5 * e["i"]):
+                e.update(target=target, cause=cause, thread=th)
+            ceiling = x + 0.3 * (1 - x) * math.sqrt(x)
+            e["i"] = max(x, e["i"] + x * max(0.0, ceiling - e["i"]))
         for i in range(3):
-            s["mood"][i] = clamp(s["mood"][i] + self.cfg["mood_nudge"]
-                                 * sum(x * EMOTIONS[n][i] for n, x in out.items()))
+            impulse = sum(x * EMOTIONS[n][i] for n, x in out.items())
+            if impulse:
+                base, mood = s["baseline"][i], s["mood"][i]
+                headroom = 1 - math.copysign(1.0, impulse) * base
+                target = base + headroom * math.tanh(impulse)
+                if (target - mood) * impulse > 0:
+                    s["mood"][i] = clamp(mood + self.cfg["mood_nudge"] * (target - mood))
 
         # Hedonic experience, reward prediction error, and learning.
         g_ = out.get
@@ -601,7 +631,8 @@ class EmotionalCore:
                          + 0.4 * max(g_("fear", 0), g_("anger", 0)), 0, 1)
         # Cortisol responds to uncontrollable and social-evaluative threat, not
         # to every negative event (Dickerson & Kemeny 2004).
-        s["stress"] += rel * max(0.0, -cong) * (1 - control) * (0.6 + 0.6 * soc_eval) * oxt_buffer
+        stress = rel * max(0.0, -cong) * (1 - control) * (0.6 + 0.6 * soc_eval) * oxt_buffer
+        s["stress"] += max(0.0, 1 - s["stress"]) * min(1.0, stress)
         ch["oxt"] = clamp(ch["oxt"] + 0.5 * (g_("gratitude", 0) + g_("admiration", 0))
                           * (0.6 + 0.4 * max(0.0, aff)), 0, 1)
         ch["opi"] = clamp(ch["opi"] + 0.4 * (g_("joy", 0) + g_("relief", 0) + g_("pride", 0)), 0, 1)
@@ -763,8 +794,15 @@ class EmotionalCore:
         res = []
         for (a, b_), (label, tend) in BLENDS.items():
             ia, ib = self.intensity(a), self.intensity(b_)
-            if ia >= floor and ib >= floor:
-                res.append((label, math.sqrt(ia * ib), tend, (a, b_)))
+            if min(ia, ib) < floor or min(ia, ib) == 0:
+                continue
+            first, second = self.s["emotions"][a], self.s["emotions"][b_]
+            # Separate episodes can colour the same mood without implying a
+            # shared motive (e.g. admiration here and distress elsewhere).
+            if any(first.get(key) and second.get(key) and first[key] != second[key]
+                   for key in ("thread", "target")):
+                continue
+            res.append((label, math.sqrt(ia * ib), tend, (a, b_)))
         return sorted(res, key=lambda r: -r[1])
 
     def body(self):
@@ -845,7 +883,10 @@ class EmotionalCore:
         b = self.body()
         if b:
             L.append("Body: " + "; ".join(b) + ".")
-        ems = sorted(s["emotions"].items(), key=lambda kv: -kv[1]["i"])[:max_emotions]
+        present = set(with_agents)
+        ems = [(n, e) for n, e in s["emotions"].items()
+               if not present or not e["target"] or e["target"] in present]
+        ems = sorted(ems, key=lambda kv: -kv[1]["i"])[:max_emotions]
         ems = [(n, e) for n, e in ems if e["i"] >= 0.15]
         for n, e in ems:
             tgt = f" toward {e['target']}" if e["target"] else ""
@@ -855,7 +896,10 @@ class EmotionalCore:
             L.append(f"- {_word(e['i'])} {n}{tgt}{why}. Tendency: {TENDENCY[n]}.{mask}")
         if not ems:
             L.append("- No strong emotion right now.")
-        for label, bi, tend, (x, y) in self.blends()[:2]:
+        blends = [blend for blend in self.blends()
+                  if all(not present or not s["emotions"][n]["target"]
+                         or s["emotions"][n]["target"] in present for n in blend[3])]
+        for label, bi, tend, (x, y) in blends[:2]:
             L.append(f"- Together, the {x} and {y} merge into {_word(bi)} {label}: {tend}.")
         d = s["drives"]
         dr = []
@@ -890,9 +934,10 @@ class EmotionalCore:
         if mem:
             L.append("Still on your mind: " + "; ".join(
                 f'{m["event"]} ({m["emotion"]})' for m in mem) + ".")
-        L.append("Let this colour word choice, pacing, what you engage with and whether "
-                 "you post at all. Show it, never state it as numbers or announce the "
-                 "emotion by name. It never changes facts, accuracy or civility.")
+        L.append("These are possible impulses. Use the current situation to decide what "
+                 "shows. Feelings about someone else can stay in the background. A plain "
+                 "answer or a practical gesture can fit. Keep facts and standards of "
+                 "evidence steady.")
         L.append("</affect>")
         return self._run("post_context", "\n".join(L))
 
