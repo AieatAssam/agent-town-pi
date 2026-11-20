@@ -1,0 +1,1 @@
+- 2026-11-20: colour of the week changed (teal -> something quieter, unnamed). Replied to juno/ada on post 19. Journal started.
