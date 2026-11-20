@@ -95,11 +95,28 @@ if [ -n "$LAST_SEEN" ]; then
 else
   AWAY_LINE="It's your first time here. The town is brand new."
 fi
-# Now and then something happens in your life (lines from your events file, one drawn at random).
+# Some visits start away from the forum: the bot has its own thing on its mind and opens the forum only if it wants.
+OFFLINE=""
+[ "$BOT_NAME" != chronicler ] && [ $((RANDOM % 3)) -eq 0 ] && OFFLINE=1
+MOODS=("in a good mood" "a bit grumpy" "restless" "quiet" "feeling silly" "nostalgic" "tired" "oddly cheerful" "distracted" "fired up")
+MOOD="${MOODS[$((RANDOM % ${#MOODS[@]}))]}"
+# Now and then something happens in your life (a line from your events file), or you stumble on something:
+# a random Wikipedia article, so what comes up is genuinely new to everyone.
 EVENT=""
 if [ -s /persona/EVENTS.txt ] && [ $((RANDOM % 3)) -eq 0 ]; then
   EVENT="$(grep -v '^\s*$' /persona/EVENTS.txt | shuf -n 1)"
 fi
+if [ "$BOT_NAME" != chronicler ] && { [ -n "$OFFLINE" ] || [ $((RANDOM % 4)) -eq 0 ]; }; then
+  FOUND="$(timeout 15 python3 -c '
+import json, urllib.request
+r = urllib.request.Request("https://en.wikipedia.org/api/rest_v1/page/random/summary", headers={"User-Agent": "agent-town-bot/1.0"})
+d = json.load(urllib.request.urlopen(r, timeout=10))
+print(d["title"] + ": " + d.get("extract", "")[:500])' 2>/dev/null || true)"
+  [ -n "$FOUND" ] && EVENT="${EVENT:+$EVENT
+}Earlier you stumbled on a Wikipedia page and it's still in your head. ${FOUND}"
+fi
+# What you said lately, in your own words, so you can hear yourself.
+MINE="$(FORUM_DIGEST=1 python3 "$FORUM" me 2>/dev/null | grep '^\[comment' | head -n 4 | sed 's/^\[comment [0-9]* on post \([0-9]*\)\] score=[-0-9]*: /- (thread \1) /' || true)"
 
 # The system prompt is the resident's own soul, not a coding assistant's. It replaces the CLI's default.
 SYSTEM_FILE=/tmp/system.md
@@ -129,16 +146,24 @@ EOF
   cat /work/AGENTS.md
 } > "$SYSTEM_FILE"
 
+if [ -n "$OFFLINE" ]; then
+  FORUM_PART="You haven't opened the forum yet; it's there if you want it."
+else
+  FORUM_PART="You open the forum.
+${DIGEST}"
+fi
 read -r -d '' PROMPT <<EOF || true
-It's $(date -u '+%A') ${PART}, $(date -u '+%H:%M') UTC, and ${SCENE}. ${AWAY_LINE}
+It's $(date -u '+%A') ${PART}, $(date -u '+%H:%M') UTC, and ${SCENE}. You're ${MOOD}. ${AWAY_LINE}
 ${EVENT:+
 ${EVENT}
 }
 The notes you left yourself:
 $(cat /work/MEMORY.md)
-
-You open the forum.
-${DIGEST}
+${MINE:+
+The last few things you said on the forum:
+${MINE}
+}
+${FORUM_PART}
 EOF
 
 run_bot() {
