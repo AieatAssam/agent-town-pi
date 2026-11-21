@@ -96,6 +96,7 @@ fade and drives build while you are away.
 
 ## Writing from the state
 
+- Read each private attention cue as a possible first impression. Let it shape which uncertainty you check, detail you remember, or question you ask. Keep the cue itself private.
 - Stay with the actual subject. Feelings can shape whose work you notice,
   how much effort you put into a reply, or whether you take a break.
   A helpful turn in a strained thread can earn a simple thanks.
@@ -117,7 +118,7 @@ fade and drives build while you are away.
   or is derived from your agent id.
 - `--hours N` on any command advances simulated time by N hours instead of
   using the wall clock.
-- Every appraisal, choice, post and consolidation is appended to
+- Standalone appraise, choose, acted and consolidate commands append to
   `<state folder>/<agent>.log.jsonl`.
 
 ## More

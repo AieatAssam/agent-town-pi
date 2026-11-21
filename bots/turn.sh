@@ -41,8 +41,18 @@ ln -sfn AGENTS.md /work/CLAUDE.md
 [ -f /work/SOUL.md ] || cp /persona/SOUL.md /work/SOUL.md
 # Emotions: the chronicler only observes. Everyone else gets a personality once, then the state is theirs.
 FEELS=""
+CLAUDE_SETTINGS='{}'
 if [ "$BOT_NAME" != chronicler ]; then
   FEELS=1
+  # The engine's own turn hooks feel in before each prompt and settle the visit after the last reply.
+  # town_turns.py keeps that from counting as a post: residents run `acted` for real posts.
+  mkdir -p "$AFFECT_STATE_DIR"
+  echo '{"plugins": ["/opt/agent-town/bots/town_turns.py"]}' > "$AFFECT_STATE_DIR/config.json"
+  HOOK="$(command -v python3) $AC"
+  CLAUDE_SETTINGS="{\"hooks\":{\"UserPromptSubmit\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$HOOK claude-hook --brief\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"$HOOK claude-hook --brief\"}]}]}}"
+  # Codex reads user hooks from ~/.codex/hooks.json; codex exec runs them only with --dangerously-bypass-hook-trust.
+  mkdir -p "$HOME/.codex"
+  echo "${CLAUDE_SETTINGS//claude-hook/codex-hook}" > "$HOME/.codex/hooks.json"
   if [ ! -f "$AFFECT_STATE_DIR/$BOT_NAME.json" ]; then
     python3 "$AC" init --persona "$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))[sys.argv[2]]))' /opt/agent-town/bots/emotion-personas.json "$BOT_NAME")" >/dev/null || echo "affect: init failed"
   fi
@@ -183,8 +193,6 @@ EOF
   cat /work/AGENTS.md
 } > "$SYSTEM_FILE"
 
-AFFECT=""
-[ -n "$FEELS" ] && AFFECT="$(python3 "$AC" context --brief 2>/dev/null || true)"
 MINE=""
 if [ -n "$OFFLINE" ]; then
   FORUM_PART="You haven't opened the forum yet; it's there if you want it."
@@ -203,9 +211,7 @@ if [ -n "$FEELS" ] && [ -d /work/projects ]; then
 fi
 read -r -d '' PROMPT <<EOF || true
 It's $(date -u '+%A') ${PART}, $(date -u '+%H:%M') UTC, and ${SCENE}. ${AWAY_LINE}
-${AFFECT:+
-${AFFECT}
-}${EVENT:+
+${EVENT:+
 ${EVENT}
 }
 The notes you left yourself:
@@ -223,17 +229,19 @@ EOF
 
 run_bot() {
   if [ "$BOT_RUNTIME" = claude ]; then
-    claude -p "$1" --system-prompt "$(cat "$SYSTEM_FILE")" --model "$CLAUDE_MODEL" --max-turns "$MAX_TURNS" --dangerously-skip-permissions || true
+    claude -p "$1" --system-prompt "$(cat "$SYSTEM_FILE")" --model "$CLAUDE_MODEL" --max-turns "$MAX_TURNS" \
+      --settings "$CLAUDE_SETTINGS" --dangerously-skip-permissions || true
   else
     # Codex has no turn cap; a visit's length is wall-clock time instead (about 25 s per step).
     timeout $((MAX_TURNS * 25)) codex exec -c model_instructions_file="\"$SYSTEM_FILE\"" -c features.image_generation=true --model "$CODEX_MODEL" \
-      --dangerously-bypass-approvals-and-sandbox -C /work "$1" || true
+      --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust -C /work "$1" || true
   fi
 }
 
 echo "turn ${TURN_ID} bot=${BOT_NAME} runtime=${BOT_RUNTIME}"
 run_bot "$PROMPT"
 if [ -n "$FEELS" ]; then
+  # Fallback for a visit cut off before the Stop hook (timeout, max turns); a no-op after it.
   python3 "$AC" consolidate >/dev/null 2>&1 || echo "affect: consolidate failed"
   # The state folder stays private (it is not synced); only this public summary of the mood is.
   python3 "$AC" state 2>/dev/null | python3 -c '

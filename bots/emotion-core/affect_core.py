@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from html import escape
 try:
     import fcntl
 except ImportError:  # Windows: no advisory locking, single-writer only
@@ -33,6 +34,7 @@ import random
 import re
 import sys
 import time
+import uuid
 from pathlib import Path
 
 VERSION = "0.2.1"
@@ -57,6 +59,25 @@ EMOTIONS = {
     "interest":       (0.30, 0.40, 0.10, 2.0, 1),
     "boredom":        (-0.20, -0.60, -0.10, 1.0, -1),
     "surprise":       (0.10, 0.60, -0.10, 0.3, 0),
+}
+
+# Private framing and attention cues grounded in the current appraisal.
+COGNITIVE_CUES = {
+    "joy": "what went well and what helped may stand out",
+    "distress": "the setback and what remains possible may stand out",
+    "hope": "signs of progress and what still depends on the outcome may stand out",
+    "fear": "possible downsides and gaps in what you know may stand out",
+    "relief": "the signs that the feared outcome has passed may stand out",
+    "disappointment": "the gap between the expected and actual outcome may stand out",
+    "pride": "your contribution and what you learned may stand out",
+    "shame": "your own misstep and how it might be perceived may stand out",
+    "admiration": "what the other person did well and what you can learn from it may stand out",
+    "reproach": "the conduct and the standard it appeared to breach may stand out",
+    "gratitude": "the help you received and why it mattered may stand out",
+    "anger": "the apparent obstacle and who seems responsible may stand out",
+    "interest": "what remains unexplained and what could clarify it may stand out",
+    "boredom": "repetition and the lack of new information may stand out",
+    "surprise": "the gap between what you expected and what happened may stand out",
 }
 
 # Functional half-lives (hours) of each neuromodulator's deviation from tonic
@@ -104,6 +125,7 @@ BLENDS = {
     ("hope", "interest"): ("eagerness", "leans in; volunteers, proposes experiments"),
     ("joy", "relief"): ("elation", "expansive and talkative"),
     ("admiration", "gratitude"): ("affection", "loyal; takes their side"),
+    ("admiration", "interest"): ("inspiration", "drawn to their example; explore and build on what they did"),
     ("admiration", "distress"): ("envy", "impressed and stung; tempted to compete or nitpick"),
     ("boredom", "distress"): ("listlessness", "going through the motions"),
     ("disappointment", "reproach"): ("disillusionment", "expects less of them now"),
@@ -181,6 +203,15 @@ def num(d, key, default, lo=-1.0, hi=1.0):
     return clamp(x, lo, hi) if math.isfinite(x) else default
 
 
+def event_identifier(appraisal):
+    if "event_id" not in appraisal:
+        return None
+    value = appraisal["event_id"]
+    if not isinstance(value, str) or not value.strip() or len(value) > 128:
+        raise ValueError("event_id must be a non-empty string of at most 128 characters")
+    return value
+
+
 def _word(i):
     return ("faint", "mild", "moderate", "strong", "intense")[min(4, int(i * 5))]
 
@@ -213,7 +244,8 @@ def random_persona(agent, seed=None):
 
 class EmotionalCore:
     HOOKS = ("pre_appraise", "post_appraise", "pre_context", "post_context",
-             "pre_choose", "post_choose", "post_advance", "post_consolidate")
+             "pre_choose", "post_choose", "post_advance", "post_consolidate",
+             "pre_turn_context", "pre_turn_update", "post_turn_update")
 
     def __init__(self, agent, state=None, config=None, persona=None, seed=None):
         self.cfg = {**DEFAULTS, **(config or {})}
@@ -238,7 +270,7 @@ class EmotionalCore:
                 "baseline": base, "mood": list(base), "emotions": {},
                 "chem": chem_baseline(traits), "stress": 0.0, "load": 0.0, "opp": 0.0,
                 "drives": {"novelty": 0.3, "social": 0.3, "fatigue": 0.0},
-                "sentiments": {}, "threads": {}, "memory": [],
+                "sentiments": {}, "relationships": {}, "threads": {}, "memory": [],
                 "t": 0.0, "wall": time.time(),
             }
         self.cb = chem_baseline(self.traits)
@@ -442,6 +474,10 @@ class EmotionalCore:
             hl = c["liking_half_life"] * min(4.0, 1 + 0.1 * rec["n"])
             rec["L"] *= 0.5 ** (hours / (hl * (2.0 if rec["L"] < 0 else 1.0)))
             rec["W"] *= 0.5 ** (hours / c["wanting_half_life"])
+        factor = 0.5 ** (hours / c["liking_half_life"])
+        for rec in s.get("relationships", {}).values():
+            rec["affection"] = clamp(num(rec, "affection", 0.0) * factor)
+            rec["guardedness"] = clamp(num(rec, "guardedness", 0.0, 0, 1) * factor, 0, 1)
         for th in s["threads"].values():
             th["exposure"] *= 0.5 ** (hours / c["exposure_half_life"])
         adaptation = s.get("emotion_adaptation", {})
@@ -464,16 +500,18 @@ class EmotionalCore:
           relevance 0..1, congruence -1..1, novelty 0..1,
           agency self|other|circumstance, praiseworthiness -1..1,
           control 0..1, certainty 0..1,
-          perceived_emotion {label, intensity}  (drives contagion)
+          perceived_emotion {label, intensity}  (drives contagion),
+          relationship {type: "romantic", affection: -1..1,
+                        trust_violation: 0..1} (explicit relationship evidence)
         """
-        ap = self._run("pre_appraise", dict(ap))
         s, t, ch = self.s, self.traits, self.s["chem"]
-        event_id = ap.get("event_id")
-        event_id = event_id if isinstance(event_id, str) else None
-        if event_id:
-            seen = s.setdefault("seen_event_ids", [])
-            if event_id in seen:
-                return {}
+        supplied_id = event_identifier(ap)
+        if supplied_id in s.get("seen_event_ids", ()):
+            return {}
+        ap = self._run("pre_appraise", dict(ap))
+        event_id = supplied_id or event_identifier(ap)
+        if event_id and event_id in s.get("seen_event_ids", ()):
+            return {}
         rel = num(ap, "relevance", 0.5, 0, 1)
         cong = num(ap, "congruence", 0.0)
         nov = num(ap, "novelty", 0.3, 0, 1)
@@ -488,6 +526,20 @@ class EmotionalCore:
         tp = [tp] if isinstance(tp, str) else (tp if isinstance(tp, list) else [])
         topics = [x.strip().lower()[:60] for x in tp if isinstance(x, str) and x.strip()][:8]
         aff = self.affinity(src) if src else 0.0
+        # Explicit relationship evidence only: generic praise or warmth must
+        # never be interpreted as romance.
+        relation = ap.get("relationship")
+        if src and isinstance(relation, dict) and relation.get("type") == "romantic":
+            rec = s.setdefault("relationships", {}).setdefault(
+                src, {"affection": 0.0, "guardedness": 0.0})
+            affection = num(relation, "affection", 0.0)
+            violation = num(relation, "trust_violation", 0.0, 0, 1)
+            if affection:
+                old = num(rec, "affection", 0.0)
+                rec["affection"] = clamp(old + 0.25 * (affection - old))
+            if violation:
+                old = num(rec, "guardedness", 0.0, 0, 1)
+                rec["guardedness"] = clamp(old + 0.35 * violation * (1 - old), 0, 1)
         hab = self.habituation(th) if th else 0.0
         nov_eff = nov * (1 - 0.6 * hab)
         out = {}
@@ -596,7 +648,7 @@ class EmotionalCore:
             target = src if directed else None
             same_subject = e.get("thread") == th and e["target"] == target
             if x >= e["i"] or (same_subject and x >= 0.5 * e["i"]):
-                e.update(target=target, cause=cause, thread=th)
+                e.update(target=target, source=src, cause=cause, thread=th)
             ceiling = x + 0.3 * (1 - x) * math.sqrt(x)
             e["i"] = max(x, e["i"] + x * max(0.0, ceiling - e["i"]))
         for i in range(3):
@@ -656,17 +708,19 @@ class EmotionalCore:
             top = max(out, key=out.get)
             if out[top] >= 0.35:
                 boost = 1 + max(0.0, self.dev("ne")) + max(0.0, self.dev("cort"))
-                s["memory"] = [m for m in s["memory"] if m["event"] != cause]  # rehearsal refreshes
+                s["memory"] = [m for m in s["memory"]
+                               if (m["event"], m.get("source"), m.get("thread")) != (cause, src, th)]
                 s["memory"].append({"t": s["t"], "event": cause, "emotion": top,
                                     "i": round(min(1.5, out[top] * boost), 3),
                                     "source": src, "thread": th})
                 if len(s["memory"]) > self.cfg["memory_cap"]:
                     s["memory"].sort(key=self._salience, reverse=True)
                     del s["memory"][self.cfg["memory_cap"]:]
-        self._run("post_appraise", {"appraisal": ap, "emotions": out, "rpe": delta})
         if event_id:
+            seen = s.setdefault("seen_event_ids", [])
             seen.append(event_id)
             del seen[:-256]
+        self._run("post_appraise", {"appraisal": ap, "emotions": out, "rpe": delta})
         return out
 
     def _salience(self, m):
@@ -779,6 +833,37 @@ class EmotionalCore:
         d["social"] *= 0.6
         d["fatigue"] = 1 - (1 - d["fatigue"]) * 0.75
 
+    def turn_context(self, prompt="", thread=None, with_agents=(), brief=False):
+        """Let a trusted host identify participants before rendering private context."""
+        turn = self._run("pre_turn_context", {"prompt": prompt, "thread": thread,
+                                              "with_agents": with_agents})
+        return self.context(turn["with_agents"], brief=brief)
+
+    def finish_turn(self, turn_id, kind="reply", thread=None, appraisals=(), message=""):
+        """Apply new outcomes and participation once per recent host turn ID."""
+        if not isinstance(turn_id, str) or not turn_id.strip() or len(turn_id) > 256:
+            raise ValueError("finish-turn requires a turn_id of 1 to 256 characters")
+        recent = self.s.get("finished_turns", [])
+        if turn_id in recent:
+            return {"updated": False}
+        update = self._run("pre_turn_update", {"turn_id": turn_id, "kind": kind,
+                           "thread": thread, "appraisals": appraisals, "message": message})
+        kind, events = update["kind"], update["appraisals"]
+        if kind not in ("reply", "skip", "new_thread"):
+            raise ValueError("unknown turn action")
+        if not isinstance(events, (list, tuple)) or not all(
+                isinstance(x, dict) and isinstance(x.get("event"), str) and x["event"].strip()
+                for x in events):
+            raise ValueError("appraisals must be a list of events with non-empty descriptions")
+        for event in events:
+            event_identifier(event)
+        elicited = [self.appraise(x) for x in events]
+        self.acted(kind, update["thread"])
+        self.consolidate()
+        self.s["finished_turns"] = (recent + [turn_id])[-256:]
+        result = {"updated": True, "elicited": elicited, "turn_id": turn_id}
+        return self._run("post_turn_update", result)
+
     # ---- expression -------------------------------------------------------
     def mood_label(self):
         m = self.s["mood"]
@@ -810,6 +895,9 @@ class EmotionalCore:
             # shared motive (e.g. admiration here and distress elsewhere).
             if any(first.get(key) and second.get(key) and first[key] != second[key]
                    for key in ("thread", "target")):
+                continue
+            if label == "inspiration" and (not first.get("source") or
+                    first.get("source") != second.get("source")):
                 continue
             res.append((label, math.sqrt(ia * ib), tend, (a, b_)))
         return sorted(res, key=lambda r: -r[1])
@@ -890,7 +978,7 @@ class EmotionalCore:
         mood = self.mood_label()
         if not brief:
             mood += f" (pleasure {P:+.2f}, arousal {A:+.2f}, dominance {D:+.2f})"
-        L = [f'<affect agent="{s["agent"]}">', f"Mood: {mood}."]
+        L = [f'<affect agent="{escape(s["agent"])}">', f"Mood: {mood}."]
         b = self.body()
         if b:
             L.append("Body: " + "; ".join(b) + ".")
@@ -899,6 +987,8 @@ class EmotionalCore:
                if not present or not e["target"] or e["target"] in present]
         ems = sorted(ems, key=lambda kv: -kv[1]["i"])[:max_emotions]
         ems = [(n, e) for n, e in ems if e["i"] >= 0.15]
+        if ems and not brief:
+            L.append("Attention cues are private. Let them shape what you notice while keeping the reply focused on the situation.")
         for n, e in ems:
             tgt = f" toward {e['target']}" if e["target"] else ""
             why = f' because "{e["cause"]}"' if e["cause"] else ""
@@ -908,6 +998,7 @@ class EmotionalCore:
                 sh = self.shown(n)
                 if e["i"] - sh > 0.1:
                     feeling += f" Felt {_word(e['i'])}, let about {_word(sh)} show."
+                feeling += f" Attention cue: {COGNITIVE_CUES[n]}."
             L.append(feeling)
         if not ems and not brief:
             L.append("- No strong emotion right now.")
@@ -946,9 +1037,23 @@ class EmotionalCore:
             L.append("Keeps getting pulled back to (without enjoying it): " + ", ".join(pulls) + ".")
         if people:
             L.append("People: " + ", ".join(people) + ".")
-        mem = sorted(s["memory"], key=lambda m: (m.get("source") in with_agents,
-                                                  self._salience(m)), reverse=True)[:3]
-        mem = [m for m in mem if self._salience(m) > 0.1]
+        relations = []
+        for name, rec in s.get("relationships", {}).items():
+            if name not in present:
+                continue
+            affection = num(rec, "affection", 0.0)
+            guarded = num(rec, "guardedness", 0.0, 0, 1)
+            if abs(affection) >= 0.15 or guarded >= 0.15:
+                tone = ("loving/attached" if affection >= 0.65 else
+                        "affectionate" if affection >= 0.15 else
+                        "less affectionate" if affection <= -0.15 else "")
+                guard = "guarded" if guarded >= 0.15 else ""
+                relations.append(f"{name} ({', '.join(x for x in (tone, guard) if x)})")
+        if relations:
+            L.append("Romantic relationship context: " + "; ".join(relations) + ".")
+        eligible = (m for m in s["memory"] if self._salience(m) > 0.1)
+        mem = sorted(eligible, key=lambda m: (m.get("source") in present, self._salience(m)),
+                     reverse=True)[:3]
         if mem:
             L.append("Still on your mind: " + "; ".join(
                 f'{m["event"]} ({m["emotion"]})' for m in mem) + ".")
@@ -956,6 +1061,8 @@ class EmotionalCore:
                  "shows. Feelings about someone else can stay in the background. A plain "
                  "answer or a practical gesture can fit. Keep facts and standards of "
                  "evidence steady.")
+        # Remembered text may itself contain markup or a lookalike state block.
+        L[1:] = [escape(line, quote=False) for line in L[1:]]
         L.append("</affect>")
         return self._run("post_context", "\n".join(L))
 
@@ -973,6 +1080,9 @@ class EmotionalCore:
             "drives": {k: round(v, 3) for k, v in s["drives"].items()},
             "sentiments": {k: {"liking": round(self.liking(k), 3), "wanting": round(r["W"], 3),
                                "episodes": r["n"]} for k, r in s["sentiments"].items()},
+            "relationships": {k: {"affection": round(num(v, "affection", 0.0), 3),
+                                  "guardedness": round(num(v, "guardedness", 0.0, 0, 1), 3)}
+                              for k, v in s.get("relationships", {}).items()},
         }
 
 
@@ -1031,19 +1141,25 @@ def _read_json(arg):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="affect_core", description=__doc__.split("\n")[0])
     ap.add_argument("cmd", choices=["init", "context", "appraise", "choose", "acted",
-                                    "tick", "consolidate", "state", "dump"])
+                                    "tick", "consolidate", "state", "dump", "finish-turn", "claude-hook", "codex-hook", "gemini-hook"])
     ap.add_argument("--agent", default=os.environ.get("AFFECT_AGENT"))
     ap.add_argument("--state-dir", default=None)
     ap.add_argument("--hours", type=float, default=None,
                     help="advance the clock by this many hours instead of using wall time")
     ap.add_argument("--json", default=None, help="JSON string, file path, or - for stdin")
     ap.add_argument("--persona", default=None, help="persona JSON for init")
-    ap.add_argument("--with", dest="with_agents", default="", help="comma-separated agent ids present")
+    ap.add_argument("--with", dest="with_agents", default=os.environ.get("AFFECT_WITH", ""), help="comma-separated agent ids present")
     ap.add_argument("--brief", action="store_true", help="omit mood scores and writing cues from context")
     ap.add_argument("--thread", default=None)
     ap.add_argument("--kind", default="reply", choices=["reply", "new_thread", "skip"])
     ap.add_argument("--seed", type=int, default=None)
     a = ap.parse_args(argv)
+    native_host = {"codex-hook": "codex", "gemini-hook": "gemini"}.get(a.cmd)
+    if native_host:
+        a.agent = a.agent or native_host
+        if not a.state_dir and not os.environ.get("AFFECT_STATE_DIR"):
+            project = hashlib.sha256(os.fsencode(Path.cwd())).hexdigest()[:20]
+            a.state_dir = Path.home() / ".local" / "state" / "agent-emotion-core" / project
     if not a.agent:
         ap.error("--agent or AFFECT_AGENT is required")
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", a.agent) or a.agent.startswith("."):
@@ -1071,6 +1187,57 @@ def main(argv=None):
 
     if a.cmd == "context":
         print(core.context([x for x in a.with_agents.split(",") if x], brief=a.brief))
+    elif native_host or a.cmd in ("finish-turn", "claude-hook"):
+        data = _read_json(a.json)
+        if not isinstance(data, dict):
+            sys.exit("affect_core: expected a turn object")
+        try:
+            if a.cmd == "finish-turn":
+                result = core.finish_turn(data.get("turn_id"), data.get("kind", a.kind),
+                                          data.get("thread", a.thread), data.get("appraisals", []))
+                print(json.dumps(result))
+            else:
+                session = data.get("session_id")
+                if not isinstance(session, str) or not session or len(session) > 128:
+                    raise ValueError("turn hook requires a session_id")
+                event = data.get("hook_event_name")
+                pending = core.s.setdefault("pending_sessions", {})
+                receipt = session
+                turn_id = data.get("turn_id") if native_host == "codex" else None
+                if turn_id is not None:
+                    if not isinstance(turn_id, str) or not turn_id.strip():
+                        raise ValueError("invalid Codex turn_id")
+                    identity = json.dumps([session, turn_id]).encode()
+                    receipt = "codex:" + hashlib.sha256(identity).hexdigest()
+                if event == ("BeforeAgent" if native_host == "gemini" else "UserPromptSubmit"):
+                    if turn_id is None:
+                        pending[receipt] = uuid.uuid4().hex
+                    elif receipt not in core.s.get("finished_turns", []):
+                        pending[receipt] = receipt
+                    people = [x for x in a.with_agents.split(",") if x]
+                    context = core.turn_context(data.get("prompt", ""), session, people, brief=a.brief)
+                    context += "\nThe completion hook records this chat reply and consolidates it. Appraise meaningful developments once as they occur."
+                    if native_host:
+                        context += f" Use agent {a.agent} and state directory {d.resolve()} for appraisal commands."
+                        output = {"additionalContext": context}
+                        if native_host == "codex":
+                            output["hookEventName"] = event
+                        print(json.dumps({"hookSpecificOutput": output}))
+                    else:
+                        print(context)
+                elif event == ("AfterAgent" if native_host == "gemini" else "Stop"):
+                    turn = pending.pop(receipt, None)
+                    if turn:
+                        key = "prompt_response" if native_host == "gemini" else "last_assistant_message"
+                        message = data.get(key) or ""
+                        core.finish_turn(turn, "reply" if message else "skip", session,
+                                         message=message)
+                    if native_host:
+                        print("{}")
+                else:
+                    raise ValueError("unsupported turn hook event")
+        except ValueError as e:
+            sys.exit(f"affect_core: {e}")
     elif a.cmd == "appraise":
         data = _read_json(a.json)
         data = data if isinstance(data, list) else [data]
@@ -1078,12 +1245,16 @@ def main(argv=None):
                    for x in data):
             sys.exit('affect_core: appraise expects an object (or array of objects) each with '
                      'a non-empty "event" string')
-        if any("event_id" in x and (not isinstance(x["event_id"], str)
-                                   or not x["event_id"].strip() or len(x["event_id"]) > 128)
-               for x in data):
-            sys.exit('affect_core: event_id must be a non-empty string of at most 128 characters')
+        try:
+            for event in data:
+                event_identifier(event)
+        except ValueError as e:
+            sys.exit(f"affect_core: {e}")
         res = []
         for x in data:
+            if x.get("event_id") in core.s.get("seen_event_ids", ()):
+                res.append({})
+                continue
             out = core.appraise(x)
             res.append(out)
             log(core, a.state_dir, {"type": "appraise", "event": x.get("event"),
