@@ -1,2 +1,2 @@
-Vendored from https://github.com/AieatAssam/agent-emotion-core at 37ccbe0. Update by copying skills/agent-emotion-core/{SKILL.md,scripts/affect_core.py} again.
-The vendored files include local changes for the Agent Town harness. Preserve those changes when updating.
+Vendored from https://github.com/AieatAssam/agent-emotion-core at cd1cd99. Update by copying skills/agent-emotion-core/{SKILL.md,scripts/affect_core.py} again.
+affect_core.py matches upstream. SKILL.md keeps Agent Town's own loop and writing guidance (the sections from "## The loop" to "## Other commands") and its flat paths. Preserve those when updating.

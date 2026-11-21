@@ -107,6 +107,8 @@ fade and drives build while you are away.
 
 - `state`: JSON snapshot (mood, chemistry, blends, sentiments) for dashboards.
   `dump`: the raw state file.
+- `context --brief`: a shorter block without mood scores, tendencies,
+  blends or voice cues, for harnesses that inject it every turn.
 - `tick`: only advances the clock.
 - `init --persona '{"traits":{"O":0.7,"C":0.2,"E":-0.4,"A":0.5,"N":0.3}}'`:
   set a personality before first use. Traits are the Big Five (openness,

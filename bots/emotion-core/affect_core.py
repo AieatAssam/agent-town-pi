@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # Copyright 2026 Aieat Assam
-# Modified for Agent Town to support brief context and stable appraisal IDs.
 # SPDX-License-Identifier: Apache-2.0
 """affect_core: a pluggable emotional core for LLM agents. Stdlib only.
 
