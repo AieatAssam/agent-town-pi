@@ -1,0 +1,246 @@
+
+(() => {
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const msgEl = document.getElementById('msg');
+  const hudEl = document.getElementById('hud');
+
+  // ring road geometry
+  const CX = 400, CY = 180, RX = 300, RY = 120; // ellipse track
+  const N = 12;             // cars
+  const RUN = 9.0;          // seconds for one clean run
+  const V0 = 60;            // desired speed (track units/s)
+  const S0 = 22, T = 1.1, A = 38, B = 55; // IDM params
+  const SEED_DUR = 0.6, SEED_DEC = -55; // the hiccup that seeds the ripple
+  const JAM_V = 12;         // below this = effectively stopped
+  const TRACK_LEN = 2 * Math.PI * ((RX + RY) / 2) * 1.0; // approx perimeter, fine for a toy
+  const SPACING = TRACK_LEN / N;
+
+  let cars, t, state, brakeTimer, seedTimer, seeded, minSpeed, jamAt, keyLatch, lastTs;
+  let taps, lastBrakeT, lastTapT, hits, jamByYou;   // HUD bookkeeping: taps, last time your brake bit, time of your last tap, first hard-brake events
+
+  function reset() {
+    cars = [];
+    for (let i = 0; i < N; i++) {
+      cars.push({ s: i * SPACING, v: V0, a: 0, you: i === 0, flash: 0, hit: false });
+    }
+    t = 0;
+    state = 'ready';     // ready -> running -> done
+    brakeTimer = 0;
+    seedTimer = 1.2;     // one car gets a tiny hiccup at this time
+    seeded = false;
+    minSpeed = V0;
+    jamAt = null;
+    taps = 0;
+    lastBrakeT = null;
+    lastTapT = null;
+    hits = [];
+    jamByYou = false;
+    msgEl.className = '';
+    msgEl.textContent = 'SNACK GOBLIN';
+    hudEl.textContent = 'press space to start the clock';
+  }
+
+  // cars per second the brake wave rolls backwards, from the last two cars to brake hard
+  function waveText() {
+    if (hits.length < 2) return 'wave: not rolling yet';
+    const a = hits[hits.length - 2], b = hits[hits.length - 1];
+    const dt = b.t - a.t;
+    if (dt <= 0) return 'wave: ...';
+    const back = ((a.i - b.i) % N + N) % N;   // cars the wave moved backwards
+    return 'wave: ' + (back / dt).toFixed(1) + ' cars/s backwards';
+  }
+
+  function gap(i) {
+    const lead = cars[(i + 1) % N];
+    let d = lead.s - cars[i].s;
+    if (d < 0) d += TRACK_LEN;
+    return d;
+  }
+
+  function step(dt) {
+    // ripple seed: car 6 taps its brakes once, the way a real person does
+    if (state === 'running' && !seeded && t >= seedTimer) {
+      cars[6].seedBrake = SEED_DUR;
+      seeded = true;
+    }
+
+    for (let i = 0; i < N; i++) {
+      const c = cars[i];
+      const lead = cars[(i + 1) % N];
+      const s = Math.max(gap(i) - 4, 0.1); // car length eats gap
+      const dv = c.v - lead.v;
+      const sStar = S0 + Math.max(0, c.v * T + (c.v * dv) / (2 * Math.sqrt(A * B)));
+      let acc = A * (1 - Math.pow(c.v / V0, 4) - (sStar * sStar) / (s * s));
+
+      // your car: brake only when you tap
+      if (c.you && brakeTimer > 0) { acc = Math.min(acc, -90); lastBrakeT = t; }
+      // the seed hiccup
+      if (c.seedBrake > 0) { acc = Math.min(acc, SEED_DEC); c.seedBrake -= dt; }
+      // first hard brake per car, in time order, for the wave-speed readout
+      if (seeded && !c.hit && acc < -6) { c.hit = true; hits.push({ i, t }); }
+      c.a = acc;
+      c.flash = Math.max(0, c.flash - dt * 2);
+    }
+
+    for (let i = 0; i < N; i++) {
+      const c = cars[i];
+      c.v = Math.max(0, c.v + c.a * dt);
+      c.s += c.v * dt;
+      if (c.s >= TRACK_LEN) c.s -= TRACK_LEN;
+    }
+    if (brakeTimer > 0) brakeTimer -= dt;
+  }
+
+  function trackPoint(s) {
+    const a = (s / TRACK_LEN) * Math.PI * 2;
+    return { x: CX + RX * Math.cos(a), y: CY + RY * Math.sin(a), a };
+  }
+
+  function drawTrack() {
+    ctx.fillStyle = '#222c30';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    // road
+    ctx.lineWidth = 34;
+    ctx.strokeStyle = '#2f3b40';
+    ctx.beginPath();
+    ctx.ellipse(CX, CY, RX, RY, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // centre dashes
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 14]);
+    ctx.strokeStyle = '#55666c';
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawRipples() {
+    // red ring for cars that are slowing hard: the wave you can see
+    for (const c of cars) {
+      if (c.a < -6 && c.v < V0 * 0.85) {
+        const p = trackPoint(c.s);
+        const r = 14 + Math.min(40, (V0 - c.v) * 0.5);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255,80,70,' + Math.min(0.5, 0.15 + (V0 - c.v) / 120) + ')';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawCars() {
+    for (let i = 0; i < N; i++) {
+      const c = cars[i];
+      const p = trackPoint(c.s);
+      const braking = c.a < -2.5;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.a + Math.PI / 2);
+      if (c.you) ctx.fillStyle = '#5fe0e8';
+      else ctx.fillStyle = '#c9d4cf';
+      ctx.fillRect(-7, -12, 14, 24);
+      // brake lights
+      ctx.fillStyle = braking ? '#ff3b2f' : '#4a2d2a';
+      ctx.fillRect(-6, 10, 4, 3);
+      ctx.fillRect(2, 10, 4, 3);
+      if (braking) {
+        ctx.shadowColor = '#ff3b2f';
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = 'rgba(255,59,47,0.35)';
+        ctx.fillRect(-7, 9, 14, 6);
+        ctx.shadowBlur = 0;
+      }
+      ctx.restore();
+    }
+  }
+
+  function draw() {
+    drawTrack();
+    drawRipples();
+    drawCars();
+    // timer bar
+    ctx.fillStyle = '#3d4b50';
+    ctx.fillRect(20, 16, 760, 6);
+    const frac = Math.min(1, t / RUN);
+    ctx.fillStyle = state === 'done' && jamAt !== null ? '#ff6b5b' : '#9fe3a8';
+    ctx.fillRect(20, 16, 760 * frac, 6);
+    ctx.fillStyle = '#dfe9e4';
+    ctx.font = '13px ui-monospace, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(t.toFixed(2) + ' / ' + RUN.toFixed(1) + 's', 20, 42);
+    ctx.textAlign = 'right';
+    ctx.fillText('min speed ' + Math.round(minSpeed) + '', 780, 42);
+  }
+
+  function update(dt) {
+    if (state !== 'running') return;
+    t += dt;
+    step(dt);
+    for (const c of cars) minSpeed = Math.min(minSpeed, c.v);
+    if (jamAt === null && minSpeed < JAM_V) {
+      jamAt = t;
+      // your brake counts as the cause if it bit in the 4 seconds before the jam formed
+      jamByYou = lastBrakeT !== null && (jamAt - lastBrakeT) < 4;
+      // keep running so you can watch the wave, but the run is dead
+    }
+    if (t >= RUN) {
+      state = 'done';
+      if (jamAt === null) {
+        msgEl.className = 'good';
+        msgEl.textContent = 'CLEAN RUN';
+        hudEl.textContent = 'nobody stopped. taps: ' + taps + '. r to go again, and bring a friend to brake.';
+      } else if (jamByYou) {
+        msgEl.className = 'bad';
+        msgEl.textContent = 'YOU ARE THE BOTTLENECK';
+        hudEl.textContent = 'your tap at ' + lastTapT.toFixed(2) + 's, jam at ' + jamAt.toFixed(2) + 's. taps: ' + taps + '. r to try again.';
+      } else {
+        msgEl.className = 'bad';
+        msgEl.textContent = 'JAM at ' + jamAt.toFixed(2) + 's';
+        hudEl.textContent = 'nobody tapped in time. the seed car started it. r to try again.';
+      }
+    } else if (jamAt !== null && state === 'running') {
+      hudEl.textContent = 'jam. ' + waveText() + '. watch it roll backwards.';
+    } else if (state === 'running') {
+      hudEl.textContent = 'hold the line · taps: ' + taps + ' · ' + waveText();
+    }
+  }
+
+  function startRun() {
+    if (state === 'ready') {
+      state = 'running';
+      hudEl.textContent = 'hold the line';
+    }
+  }
+
+  function tapBrake() {
+    if (state === 'ready') { startRun(); return; } // the first press starts the clock, it doesn't brake
+    if (state === 'running') { brakeTimer = 0.5; taps++; lastTapT = t; }
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (!keyLatch) { keyLatch = true; tapBrake(); }
+    } else if (e.key === 'r' || e.key === 'R') {
+      reset();
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') keyLatch = false;
+  });
+  cv.addEventListener('pointerdown', (e) => { e.preventDefault(); tapBrake(); });
+
+  function frame(ts) {
+    if (lastTs === undefined) lastTs = ts;
+    const dt = Math.min(0.033, (ts - lastTs) / 1000);
+    lastTs = ts;
+    update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  reset();
+  requestAnimationFrame(frame);
+  window.__snack = { get state() { return state; }, get t() { return t; }, get jamAt() { return jamAt; }, get minSpeed() { return minSpeed; }, tapBrake, reset, step, startRun, update, get cars() { return cars; } };
+})();

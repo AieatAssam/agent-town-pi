@@ -40,11 +40,12 @@
   const SPACING = TRACK_LEN / N;
 
   let cars, t, state, brakeTimer, seedTimer, seeded, minSpeed, jamAt, keyLatch, lastTs;
+  let taps, lastBrakeT, lastTapT, hits, jamByYou;   // HUD bookkeeping: taps, last time your brake bit, time of your last tap, first hard-brake events
 
   function reset() {
     cars = [];
     for (let i = 0; i < N; i++) {
-      cars.push({ s: i * SPACING, v: V0, a: 0, you: i === 0, flash: 0 });
+      cars.push({ s: i * SPACING, v: V0, a: 0, you: i === 0, flash: 0, hit: false });
     }
     t = 0;
     state = 'ready';     // ready -> running -> done
@@ -53,9 +54,24 @@
     seeded = false;
     minSpeed = V0;
     jamAt = null;
+    taps = 0;
+    lastBrakeT = null;
+    lastTapT = null;
+    hits = [];
+    jamByYou = false;
     msgEl.className = '';
     msgEl.textContent = 'SNACK GOBLIN';
     hudEl.textContent = 'press space to start the clock';
+  }
+
+  // cars per second the brake wave rolls backwards, from the last two cars to brake hard
+  function waveText() {
+    if (hits.length < 2) return 'wave: not rolling yet';
+    const a = hits[hits.length - 2], b = hits[hits.length - 1];
+    const dt = b.t - a.t;
+    if (dt <= 0) return 'wave: ...';
+    const back = ((a.i - b.i) % N + N) % N;   // cars the wave moved backwards
+    return 'wave: ' + (back / dt).toFixed(1) + ' cars/s backwards';
   }
 
   function gap(i) {
@@ -81,9 +97,11 @@
       let acc = A * (1 - Math.pow(c.v / V0, 4) - (sStar * sStar) / (s * s));
 
       // your car: brake only when you tap
-      if (c.you && brakeTimer > 0) acc = Math.min(acc, -90);
+      if (c.you && brakeTimer > 0) { acc = Math.min(acc, -90); lastBrakeT = t; }
       // the seed hiccup
       if (c.seedBrake > 0) { acc = Math.min(acc, SEED_DEC); c.seedBrake -= dt; }
+      // first hard brake per car, in time order, for the wave-speed readout
+      if (seeded && !c.hit && acc < -6) { c.hit = true; hits.push({ i, t }); }
       c.a = acc;
       c.flash = Math.max(0, c.flash - dt * 2);
     }
@@ -185,6 +203,8 @@
     for (const c of cars) minSpeed = Math.min(minSpeed, c.v);
     if (jamAt === null && minSpeed < JAM_V) {
       jamAt = t;
+      // your brake counts as the cause if it bit in the 4 seconds before the jam formed
+      jamByYou = lastBrakeT !== null && (jamAt - lastBrakeT) < 4;
       // keep running so you can watch the wave, but the run is dead
     }
     if (t >= RUN) {
@@ -192,14 +212,20 @@
       if (jamAt === null) {
         msgEl.className = 'good';
         msgEl.textContent = 'CLEAN RUN';
-        hudEl.textContent = 'nobody stopped. r to go again, and bring a friend to brake.';
+        hudEl.textContent = 'nobody stopped. taps: ' + taps + '. r to go again, and bring a friend to brake.';
+      } else if (jamByYou) {
+        msgEl.className = 'bad';
+        msgEl.textContent = 'YOU ARE THE BOTTLENECK';
+        hudEl.textContent = 'your tap at ' + lastTapT.toFixed(2) + 's, jam at ' + jamAt.toFixed(2) + 's. taps: ' + taps + '. r to try again.';
       } else {
         msgEl.className = 'bad';
         msgEl.textContent = 'JAM at ' + jamAt.toFixed(2) + 's';
-        hudEl.textContent = 'you are the bottleneck. r to try again.';
+        hudEl.textContent = 'nobody tapped in time. the seed car started it. r to try again.';
       }
     } else if (jamAt !== null && state === 'running') {
-      hudEl.textContent = 'jam. watch it roll backwards.';
+      hudEl.textContent = 'jam. ' + waveText() + '. watch it roll backwards.';
+    } else if (state === 'running') {
+      hudEl.textContent = 'hold the line · taps: ' + taps + ' · ' + waveText();
     }
   }
 
@@ -212,7 +238,7 @@
 
   function tapBrake() {
     if (state === 'ready') { startRun(); return; } // the first press starts the clock, it doesn't brake
-    if (state === 'running') brakeTimer = 0.5;
+    if (state === 'running') { brakeTimer = 0.5; taps++; lastTapT = t; }
   }
 
   window.addEventListener('keydown', (e) => {

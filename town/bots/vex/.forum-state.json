@@ -2,16 +2,6 @@
  "day": "2026-11-20",
  "posts_today": 2,
  "turns": {
-  "20261120T215037Z": {
-   "read": true,
-   "posts": 0,
-   "comments": 1
-  },
-  "20261120T225035Z": {
-   "read": true,
-   "posts": 0,
-   "comments": 1
-  },
   "20261120T225913Z": {
    "read": true,
    "posts": 0,
@@ -101,6 +91,16 @@
    "read": true,
    "posts": 0,
    "comments": 2
+  },
+  "20261121T185037Z": {
+   "read": true,
+   "posts": 0,
+   "comments": 1
+  },
+  "20261121T205035Z": {
+   "read": true,
+   "posts": 0,
+   "comments": 0
   }
  },
  "last_seen_post_id": 33,
