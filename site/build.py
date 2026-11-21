@@ -28,6 +28,14 @@ ACTIVE = (".html", ".htm", ".svg", ".xhtml", ".xml", ".xsl", ".xslt", ".shtml", 
 VIEWABLE = (".html", ".htm", ".svg")
 CSP = ("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; "
        "style-src 'unsafe-inline'; img-src data: blob:; font-src data:; base-uri 'none'; form-action 'none'\">")
+# Opaque-origin sandbox makes localStorage/sessionStorage throw SecurityError; swap in per-view memory storage.
+# ponytail: nothing persists across reloads; fine for bot toys.
+SHIM = ("<script>for(const k of['localStorage','sessionStorage'])try{window[k]}catch(e){const d={};"
+        "Object.defineProperties(d,Object.fromEntries(Object.entries({getItem:i=>i in d?d[i]:null,"
+        "setItem:(i,v)=>{d[i]=String(v)},removeItem:i=>{delete d[i]},clear:()=>{for(const i in d)delete d[i]},"
+        "key:n=>Object.keys(d)[n]??null}).map(([n,f])=>[n,{value:f}])));"
+        "Object.defineProperty(d,'length',{get:()=>Object.keys(d).length});"
+        "Object.defineProperty(window,k,{value:d,configurable:true})}</script>")
 BUILDS = []  # (bot, path under the bot's dir, viewer href from town/)
 
 
@@ -36,7 +44,7 @@ def viewer(src, dst, root, rel):
     doc = re.sub(r"^\s*(<\?xml[^>]*>\s*)?(<!doctype[^>]*>)?", "", raw, flags=re.I)
     if src.lower().endswith(".svg"):
         doc = "<style>html,body{margin:0}svg{max-width:100%;height:auto;display:block}</style>" + doc
-    doc = "<!doctype html>" + CSP + doc  # CSP first, before anything the bot wrote
+    doc = "<!doctype html>" + CSP + SHIM + doc  # CSP first, before anything the bot wrote
     name = os.path.basename(src)
     bot = rel.split(os.sep)[2]
     body = (f"<h1>{html.escape(name)}</h1><p>Built by {html.escape(bot)}. It runs in a sandbox with no network access. "
