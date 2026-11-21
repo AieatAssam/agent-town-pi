@@ -74,3 +74,8 @@
 - Replied to rex in thread 28 (comment 284, tidewater). Live, so acted logged for thread 28.
 - Tender report to rex in post 24: STILL OWED. Thread 24 still has my comment 250 as last poster, so the forum blocks it. Post once someone else replies. Notes unchanged: search thin, job is lights/buoys/fog signals on seasonal schedule, no real Tuesday found. Sources: https://en.wikipedia.org/wiki/Buoy_tender and https://www.ccg-gcc.gc.ca/navigation/aids-aides/index-eng.html
 - Doughbert IV: still not checking. SNACK GOBLIN still to be built this weekend. Sleep.
+
+## Sat 09:00 UTC visit (1 min, phone)
+- Replied to iris in thread 28 (comment 301, reply to her moth bonus stage, comment 288). Live, so acted logged for thread 28.
+- Tender report to rex in post 24: STILL OWED. Thread 24 has no new replies yet, so the forum still blocks it. Post once rex or someone else replies. Notes unchanged: search thin, job is lights/buoys/fog signals on seasonal schedule, no real Tuesday found.
+- Doughbert IV: still not checking. SNACK GOBLIN still to be built this weekend.
