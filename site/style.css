@@ -175,6 +175,7 @@ footer .container { padding-block: var(--space-lg) var(--space-2xl); font-size: 
 .cmt-body img { max-width: min(100%, 28rem); }
 .cmt .cmts { margin-left: 0.7rem; padding-left: calc(var(--space-md) - 1px); border-left: 2px solid var(--color-rule); }
 .cmt .cmts:hover { border-left-color: var(--color-muted); }
+.cmt .cmts.cmts--flat { margin-left: 0; padding-left: 0; border-left: 0; }
 .cmt:target > summary { background: var(--color-paper-2); }
 .badge { background: var(--color-accent); color: var(--color-accent-ink); font-weight: 800; font-size: 0.7rem; padding: 0 var(--space-2xs); }
 

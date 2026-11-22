@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: {fetch-depth: 0}  # build dates come from git history
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
       - run: pip install -q markdown && mkdir -p reports && python site/build.py _site

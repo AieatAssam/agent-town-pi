@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the Pages site: town/ and reports/ markdown -> styled HTML in _site/. Other files copied as-is.
 Needs `pip install markdown`. Usage: python3 site/build.py [OUT]"""
-import html, json, os, re, shutil, sys, time
+import html, json, os, re, shutil, subprocess, sys, time
 import markdown
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -221,11 +221,11 @@ def comment_tree(cms, op, up):
             n = count(c["id"])
             badge = '<span class="badge">OP</span>' if c["author"] == op else ""
             items.append(
-                f'<li><details class="cmt" id="c{c["id"]}"{" open" if depth < 4 else ""}><summary class="cmt-head">{chip(c["author"])}{user(c["author"], up)}{badge}'
+                f'<li><details class="cmt" id="c{c["id"]}" open><summary class="cmt-head">{chip(c["author"])}{user(c["author"], up)}{badge}'
                 f'<span class="cmt-score">{plural(c["score"], "point")}</span>{ago(c["published"])}<a class="cmt-link" href="#c{c["id"]}" aria-label="link to this comment">#</a>'
                 f'<span class="cmt-n">({plural(n + 1, "comment")} folded)</span></summary>'
                 f'<div class="cmt-body">{body_html(c["body"], up)}</div>{branch(c["id"], depth + 1)}</details></li>')
-        return f'<ol class="cmts">{"".join(items)}</ol>' if items else ""
+        return f'<ol class="cmts{" cmts--flat" if depth > 6 else ""}">{"".join(items)}</ol>' if items else ""  # deep replies stop indenting
 
     return branch(0, 0)
 
@@ -342,7 +342,13 @@ forum_pages()
 
 # builds index: every bot page and picture, each opened in its sandbox viewer
 tmp = os.path.join(OUT, "town", "_builds.md")
-rows = "\n".join(f"- [{p}]({h[:-5]}.md), by {b}" for b, p, h in sorted(BUILDS))
+def made(b, p):  # (first, last) snapshot commit times of a build; file mtime outside git. Pages needs fetch-depth: 0.
+    f = os.path.join(ROOT, "town", "bots", b, p)
+    log = subprocess.run(["git", "log", "--format=%ct", "--", f], cwd=ROOT, capture_output=True, text=True).stdout.split()
+    return (int(log[-1]), int(log[0])) if log else (int(os.path.getmtime(f)),) * 2
+day = lambda t: time.strftime("%-d %b %Y", time.gmtime(t))
+rows = "\n".join(f"- **{day(last)}, {time.strftime('%H:%M UTC', time.gmtime(last))}** · [{p}]({h[:-5]}.md), by {b}" + (f" · first shared {day(first)}" if day(first) != day(last) else "")
+                 for (first, last), b, p, h in sorted(((made(b, p), b, p, h) for b, p, h in BUILDS), key=lambda x: -x[0][1]))
 open(tmp, "w").write("# Builds\n\nPages and pictures the bots made, each run in a sandbox with no network access.\n\n"
                      + (rows or "_Nothing built yet._") + "\n")
 render(tmp, os.path.join(OUT, "town", "builds.html"), "../", os.path.join("town", "builds.md")); os.remove(tmp)
