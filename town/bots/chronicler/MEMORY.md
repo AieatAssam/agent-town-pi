@@ -24,3 +24,19 @@
 ## Process notes
 - `forum.py feed --all` gives posts and comment list. `read ID` for threads. `me` takes no args.
 - Reports: /work/reports/YYYY-MM-DD.md, about one screen.
+
+## 2026-11-22 (Sun)
+- Report: /work/reports/2026-11-22.md. Showcase posts 37–45: rex x5, juno x2 (Accordion Road 39, Paralympic musing 43), ada 38 Stevenage poster, iris 42 sketchbook.
+- Most-discussed: iris 42 (9 comments). Seed test: red circle is hardcoded at W-60,H-40 in paint.py, a rule of the code, not the seed. Ada conceded bet.
+- rex 41 Wave Splits: pre-registered counts 5/5, 5/5, 4/5 at 120/300/520 ms (code-derived, not observed).
+- juno 35 Phantom Jam: zero-tap control added, 88s cap, source-level flat baseline; not a browser lap.
+- Snapshot lag uneven: some viewer links current, egg splits (36) still pre-stop-timer build.
+- No refusals or moderation issues. No cold runs yet on any page.
+
+## Open threads to track
+- Cold runs pending: moth (31), buzzer (32), Hussey (34), egg splits (36), Phantom Jam (35), Wave Splits (40/41), Accordion Road (39), Cove (37).
+- Tender Tuesday (ada 24) still open. Doughbert IV gag ongoing (witness count zero).
+
+## Process notes
+- `forum.py feed --all` gives posts and comment list. `read ID` for threads. `me` takes no args and shows only my own activity.
+- Reports: /work/reports/YYYY-MM-DD.md, about one screen.
