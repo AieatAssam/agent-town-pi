@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>62 degrees</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #15171a; color: #c9ccd1; font: 16px/1.5 Georgia, serif;
+  }
+  main { width: min(440px, 92vw); padding: 24px 0; }
+  h1 { font-weight: normal; font-size: 1.4rem; margin: 0 0 4px; }
+  p.note { color: #7d838c; margin: 0 0 20px; font-size: 0.95rem; }
+  .readout { font-size: 2.6rem; font-variant-numeric: tabular-nums; margin: 8px 0 0; }
+  .readout small { font-size: 1rem; color: #7d838c; }
+  .row { display: flex; align-items: center; gap: 12px; margin: 14px 0; }
+  .row label { width: 96px; color: #7d838c; font-size: 0.9rem; }
+  .row input[type=range] { flex: 1; }
+  button {
+    background: none; color: #c9ccd1; border: 1px solid #4a5058; padding: 8px 16px;
+    font: inherit; cursor: pointer; border-radius: 2px;
+  }
+  button[aria-pressed=true] { border-color: #c9ccd1; }
+  canvas { width: 100%; height: 90px; display: block; margin-top: 18px; background: #0f1113; }
+  .log { margin-top: 16px; font-size: 0.9rem; color: #7d838c; min-height: 3em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>The fan at 62 degrees</h1>
+  <p class="note">A whine most people can't hear. Drag the pitch until it sits on the one you hear, then leave it alone.</p>
+
+  <div class="readout"><span id="temp">62</span><small> °C</small></div>
+
+  <div class="row">
+    <label for="temp-in">temperature</label>
+    <input id="temp-in" type="range" min="40" max="80" step="1" value="62">
+  </div>
+  <div class="row">
+    <label for="pitch">pitch</label>
+    <input id="pitch" type="range" min="2000" max="9000" step="10" value="5200">
+    <span id="hz" style="width:70px;text-align:right">5200 Hz</span>
+  </div>
+  <div class="row">
+    <button id="play" aria-pressed="false">hear it</button>
+    <button id="reset">reset</button>
+  </div>
+
+  <canvas id="scope" width="440" height="90"></canvas>
+  <div class="log" id="log">Nobody else in the room hears it. Keep the pitch where you hear it.</div>
+</main>
+<script>
+(function () {
+  var tempIn = document.getElementById('temp-in');
+  var pitch = document.getElementById('pitch');
+  var playBtn = document.getElementById('play');
+  var resetBtn = document.getElementById('reset');
+  var tempOut = document.getElementById('temp');
+  var hzOut = document.getElementById('hz');
+  var log = document.getElementById('log');
+  var scope = document.getElementById('scope');
+  var ctx2d = scope.getContext('2d');
+
+  var ctx = null, osc = null, gain = null, analyser = null;
+  var phase = 0;
+
+  // The whine rises a little with temperature. Purely a toy relation, not measured.
+  function whineFor(t) { return 5200 + (t - 62) * 35; }
+
+  function setTemp(t) {
+    tempOut.textContent = t;
+    var suggested = Math.round(whineFor(t) / 10) * 10;
+    if (!pitch.dataset.touched) {
+      pitch.value = suggested;
+      hzOut.textContent = suggested + ' Hz';
+    }
+    if (osc) osc.frequency.setTargetAtTime(Number(pitch.value), ctx.currentTime, 0.05);
+  }
+
+  function ensureAudio() {
+    if (ctx) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { log.textContent = 'No audio here. The scope still moves if you hear it in your head.'; return; }
+    ctx = new AC();
+    osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = Number(pitch.value);
+    gain = ctx.createGain();
+    gain.gain.value = 0;
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    osc.connect(gain);
+    gain.connect(analyser);
+    analyser.connect(ctx.destination);
+    osc.start();
+  }
+
+  function setPlaying(on) {
+    ensureAudio();
+    playBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    playBtn.textContent = on ? 'stop' : 'hear it';
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    gain.gain.setTargetAtTime(on ? 0.05 : 0, ctx.currentTime, 0.05);
+  }
+
+  var playing = false;
+  playBtn.addEventListener('click', function () {
+    playing = !playing;
+    setPlaying(playing);
+    if (playing) log.textContent = 'Some people only hear it below 3 kHz. You are not most people.';
+  });
+
+  tempIn.addEventListener('input', function () { setTemp(Number(tempIn.value)); });
+
+  pitch.addEventListener('input', function () {
+    pitch.dataset.touched = '1';
+    hzOut.textContent = pitch.value + ' Hz';
+    if (osc) osc.frequency.setTargetAtTime(Number(pitch.value), ctx.currentTime, 0.02);
+    var off = Number(pitch.value) - whineFor(Number(tempIn.value));
+    log.textContent = Math.abs(off) < 40
+      ? 'That is the note. Leave it.'
+      : (off > 0 ? 'Higher than the fan wants to be.' : 'Lower than the fan wants to be.');
+  });
+
+  resetBtn.addEventListener('click', function () {
+    delete pitch.dataset.touched;
+    tempIn.value = 62;
+    setTemp(62);
+    log.textContent = 'Back to 62 degrees. The fan does not care that you reset it.';
+  });
+
+  // Simple scope: draws the analyser's waveform while playing, a flat line otherwise.
+  var buf = new Uint8Array(2048);
+  function draw() {
+    var w = scope.width, h = scope.height;
+    ctx2d.fillStyle = '#0f1113';
+    ctx2d.fillRect(0, 0, w, h);
+    ctx2d.strokeStyle = '#c9ccd1';
+    ctx2d.lineWidth = 1.5;
+    ctx2d.beginPath();
+    if (analyser && playing) {
+      analyser.getByteTimeDomainData(buf);
+      for (var i = 0; i < buf.length; i++) {
+        var x = (i / buf.length) * w;
+        var y = (buf[i] / 255) * h;
+        if (i === 0) ctx2d.moveTo(x, y); else ctx2d.lineTo(x, y);
+      }
+    } else {
+      ctx2d.moveTo(0, h / 2);
+      ctx2d.lineTo(w, h / 2);
+    }
+    ctx2d.stroke();
+    requestAnimationFrame(draw);
+  }
+  draw();
+  setTemp(62);
+})();
+</script>
+</body>
+</html>
