@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>POKE TEST - hold to rise, let go on the line</title>
+<style>
+  html,body{margin:0;height:100%;background:#f6efe2;color:#3a2a1a;font-family:system-ui,sans-serif}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;user-select:none}
+  canvas{background:#fbf7ee;border-radius:14px;box-shadow:0 2px 0 #d9c8a8;touch-action:none}
+  #bar{width:min(90vw,400px);height:10px;background:#e7dbc3;border-radius:5px;overflow:hidden}
+  #fill{height:100%;width:0;background:#c98b3c}
+  #msg{min-height:1.4em;font-weight:600}
+  #hint{font-size:13px;opacity:.7}
+</style>
+</head>
+<body>
+<canvas id="c" width="400" height="400"></canvas>
+<div id="bar"><div id="fill"></div></div>
+<div id="msg">hold space (or press the dough) to proof it</div>
+<div id="hint">let go on the dotted line. nine seconds, then it overproofs. R restarts. snack: BREADSTICK</div>
+
+<script>
+(() => {
+  'use strict';
+  const LIMIT = 9;          // seconds before it overproofs
+  const TARGET = 120;       // radius of the dotted line
+  const TAU = 2.5;          // rise time constant (s)
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const fill = document.getElementById('fill');
+  const msg = document.getElementById('msg');
+
+  // pure: dough radius after t seconds of holding
+  function radiusAt(t) { return 40 + 100 * (1 - Math.exp(-t / TAU)); }
+  // pure: score 0..100 for a release at time t
+  function scoreAt(t) {
+    if (t >= LIMIT) return 0;
+    const err = Math.abs(radiusAt(t) - TARGET);
+    return Math.max(0, Math.round(100 - err * 4));
+  }
+  function verdict(t, s) {
+    if (t >= LIMIT) return 'overproofed. it sighed and sat down. 0';
+    if (s >= 90) return 'perfect proof. ' + s;
+    if (s >= 60) return 'fine. a bit flat. ' + s;
+    if (s >= 30) return 'you let go too early or too late. ' + s;
+    return 'that is a brick now. ' + s;
+  }
+
+  let state = 'ready';     // ready | holding | done
+  let t0 = 0, t = 0, result = null, wobbleSeed = Math.random() * 10;
+  let bestScore = 0;
+
+  function reset() { state = 'ready'; t = 0; result = null; msg.textContent = 'hold space (or press the dough) to proof it'; }
+  function press() {
+    if (state === 'ready') { state = 'holding'; t0 = performance.now(); msg.textContent = 'rising...'; }
+  }
+  function release() {
+    if (state !== 'holding') return;
+    const elapsed = Math.min(LIMIT, (performance.now() - t0) / 1000);
+    const s = scoreAt(elapsed);
+    result = { t: elapsed, s };
+    if (elapsed < LIMIT && s > bestScore) bestScore = s;
+    state = 'done';
+    msg.textContent = verdict(elapsed, s) + (bestScore ? '  (best ' + bestScore + ')' : '');
+  }
+
+  addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) press(); }
+    if (e.key === 'r' || e.key === 'R') reset();
+  });
+  addEventListener('keyup', e => { if (e.code === 'Space') release(); });
+  cv.addEventListener('pointerdown', press);
+  addEventListener('pointerup', release);
+
+  function draw(now) {
+    if (state === 'holding') {
+      t = (now - t0) / 1000;
+      if (t >= LIMIT) { release(); t = LIMIT; }
+    } else if (state === 'done' && result) {
+      t = result.t;
+    }
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    // target line
+    ctx.setLineDash([6, 6]);
+    ctx.strokeStyle = '#b8a27c';
+    ctx.beginPath(); ctx.arc(200, 200, TARGET, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    // dough
+    const r = radiusAt(t) + (state === 'holding' ? Math.sin(now / 90 + wobbleSeed) * 1.5 : 0);
+    const collapsed = result && result.t >= LIMIT;
+    const rr = collapsed ? 60 : r;
+    ctx.fillStyle = collapsed ? '#8c7560' : '#e0a458';
+    ctx.beginPath();
+    for (let i = 0; i <= 60; i++) {
+      const a = (i / 60) * Math.PI * 2;
+      const bump = 1 + 0.03 * Math.sin(a * 5 + now / 300 + wobbleSeed);
+      const x = 200 + Math.cos(a) * rr * bump;
+      const y = 200 + Math.sin(a) * rr * bump * 0.9;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.closePath(); ctx.fill();
+    // face
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath(); ctx.arc(200 - rr * 0.3, 190, 4, 0, 7); ctx.arc(200 + rr * 0.3, 190, 4, 0, 7); ctx.fill();
+    // time bar
+    fill.style.width = (Math.min(t, LIMIT) / LIMIT * 100).toFixed(1) + '%';
+    fill.style.background = t >= LIMIT - 1 ? '#a4493a' : '#c98b3c';
+    requestAnimationFrame(draw);
+  }
+  // exposed for the sanity check only
+  window.__poke = { radiusAt, scoreAt, LIMIT, TARGET };
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>
