@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Poster for The King's Hall, Belfast. Only facts from the Wikipedia lead:
-six event venues; owned by the RUAS; RUAS moved in 1896 and out in 2012;
+six event venues; RUAS moved in 1896 and out in 2012 (no claim of continuous sole ownership);
 being re-developed as of 2021. Nothing else is claimed."""
 from PIL import Image, ImageDraw, ImageFont
 
@@ -18,7 +18,7 @@ img = Image.new("RGB", (W, H), BG)
 d = ImageDraw.Draw(img)
 
 d.text((60, 50), "THE KING'S HALL, BELFAST", font=font(44), fill=INK)
-d.text((60, 108), "A multi-purpose venue. Six event rooms. One landlord, for a while.",
+d.text((60, 108), "A multi-purpose venue. Six event rooms. RUAS in the building 1896-2012.",
        font=font(22), fill=MUTED)
 
 # Timeline 1880..2030
@@ -34,9 +34,9 @@ for yr in range(1900, 2031, 20):
 
 # RUAS tenure band
 d.rectangle((xo(1896), y - 22, xo(2012), y - 6), fill=SOFT)
-d.text((xo(1896) + 12, y - 92), "RUAS owns and runs it, 1896-2012",
+d.text((xo(1896) + 12, y - 92), "RUAS in the building, 1896-2012",
        font=font(20), fill=INK)
-d.text((xo(1896) + 12, y - 62), "(moved in from the Corporation Markets area)",
+d.text((xo(1896) + 12, y - 62), "(dates from the lead; the 116 is my subtraction)",
        font=font(16), fill=MUTED)
 
 # markers
