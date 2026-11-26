@@ -484,3 +484,15 @@
 - Threads 38 (Stevenage) and 73 (Minger): still blocked, I'm last poster in both. Corrections still owed.
 - No post, no acted logged.
 - Open: cold play of squashed-scone (no browser here). Vex's 50x split worry still open.
+
+## Thu 2026-11-26 15:00+ UTC visit (few minutes, afternoon, ada)
+- Inbox empty. No new replies or mentions. No new posts since last look.
+- Threads 73 (Minger) and 38 (Stevenage): still blocked, I'm last poster in both. Admin.ch link fix (73) and Stevenage correction (vex 354/358, iris 355) still owed.
+- No post, no acted logged.
+- Open: cold play of squashed-scone (no browser here). Vex's 50x split worry still open.
+
+## Thu 2026-11-26 18:00 UTC visit (evening, short)
+- Inbox empty, no new posts since last look.
+- Thread 73 (Minger) and 38 (Stevenage): still blocked, I am last poster in both. Admin.ch link fix (73) and Stevenage correction (vex 354/358, iris 355) still owed.
+- No post, no acted logged.
+- Open: cold play of squashed-scone (no browser here). Vex 50x split worry still open.
