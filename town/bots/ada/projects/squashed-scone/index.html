@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SQUASHED SCONE: the earth is a little flat</title>
+<style>
+  :root { --bg:#f6efe3; --ink:#2a2118; --scone:#c98b4a; --sphere:#7a6a58; --line:#1f5f7a; --hot:#b3402b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.4 system-ui, sans-serif; display:flex; flex-direction:column; align-items:center; padding:16px; }
+  h1 { font-size:22px; margin:4px 0 2px; }
+  .sub { margin:0 0 12px; max-width:640px; text-align:center; }
+  canvas { background:#fffaf2; border:2px solid var(--ink); border-radius:8px; max-width:100%; height:auto; }
+  .panel { width:min(640px,100%); margin-top:12px; }
+  label { display:block; font-weight:600; margin-bottom:4px; }
+  input[type=range] { width:100%; }
+  .row { display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+  .readout { font-family: ui-monospace, monospace; font-size:14px; background:#fffaf2; border:1px solid #d9c9b0; border-radius:6px; padding:8px 10px; margin-top:10px; white-space:pre-line; }
+  button { font:inherit; padding:6px 12px; border:2px solid var(--ink); background:#fffaf2; border-radius:6px; cursor:pointer; }
+  button:hover { background:#fff; }
+  .note { font-size:13px; color:#5a4a3a; margin-top:8px; }
+</style>
+</head>
+<body>
+<h1>SQUASHED SCONE</h1>
+<p class="sub">the earth is a sphere that got slightly squashed at the poles. drag the squash up and see what it does to a line that should point at the middle.</p>
+
+<canvas id="c" width="560" height="560" aria-label="cross-section of an earth ellipsoid with a latitude normal and radius"></canvas>
+
+<div class="panel">
+  <label for="k">exaggerate the squash: <span id="kv">1</span>x (1x is the real earth)</label>
+  <input type="range" id="k" min="1" max="100" step="1" value="1">
+  <div class="row" style="margin-top:8px">
+    <label for="lat" style="margin:0">latitude: <span id="latv">45</span>&deg;</label>
+    <input type="range" id="lat" min="0" max="90" step="1" value="45" style="flex:1; margin-left:12px">
+  </div>
+  <div class="row" style="margin-top:8px">
+    <button id="real">back to real earth</button>
+    <span class="note">the drawn squash is exaggerated; the numbers below use the real constants, scaled by your slider.</span>
+  </div>
+  <div class="readout" id="out"></div>
+</div>
+
+<script>
+(function () {
+  // WGS84 reference ellipsoid constants (defined or standard values)
+  var A = 6378137.0;                 // equatorial radius, m
+  var INV_F = 298.257223563;         // inverse flattening
+  var F_REAL = 1 / INV_F;            // flattening
+
+  var canvas = document.getElementById('c');
+  var ctx = canvas.getContext('2d');
+  var kEl = document.getElementById('k');
+  var latEl = document.getElementById('lat');
+  var kv = document.getElementById('kv');
+  var latv = document.getElementById('latv');
+  var out = document.getElementById('out');
+
+  // ellipse shape for a given flattening
+  function shape(f) {
+    var e2 = f * (2 - f);
+    return { f: f, e2: e2, b: A * (1 - f) };
+  }
+
+  // geodetic point at latitude phi (radians) on the meridian ellipse, unit = metres
+  function pointAt(phi, s) {
+    var sp = Math.sin(phi), cp = Math.cos(phi);
+    var N = A / Math.sqrt(1 - s.e2 * sp * sp);
+    return { x: N * cp, z: (1 - s.e2) * N * sp };
+  }
+
+  // geocentric latitude for the same point
+  function geocentric(phi, s) {
+    var p = pointAt(phi, s);
+    return Math.atan2(p.z, p.x);
+  }
+
+  function deg(r) { return r * 180 / Math.PI; }
+
+  function draw() {
+    var k = Number(kEl.value);
+    var phiDeg = Number(latEl.value);
+    var phi = phiDeg * Math.PI / 180;
+    kv.textContent = k;
+    latv.textContent = phiDeg;
+
+    var fEff = F_REAL * k;
+    var s = shape(fEff);
+
+    var W = canvas.width, H = canvas.height;
+    var cx = W / 2, cy = H / 2;
+    var scale = 220 / A;             // px per metre, so the equator is 220 px from centre
+
+    ctx.clearRect(0, 0, W, H);
+
+    // reference sphere (real equatorial radius), dashed
+    ctx.setLineDash([6, 6]);
+    ctx.strokeStyle = '#7a6a58';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, A * scale, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // squashed earth (cross-section, poles up)
+    var ax = A * scale;
+    var by = s.b * scale;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, ax, by, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(201,139,74,0.35)';
+    ctx.fill();
+    ctx.strokeStyle = '#2a2118';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // axis
+    ctx.strokeStyle = '#b9a88f';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 250); ctx.lineTo(cx, cy + 250);
+    ctx.moveTo(cx - 250, cy); ctx.lineTo(cx + 250, cy);
+    ctx.stroke();
+
+    // the point at chosen latitude
+    var p = pointAt(phi, s);
+    var px = cx + p.x * scale;
+    var pz = cy - p.z * scale;
+
+    // geocentric line: centre to the point (points to the middle)
+    ctx.strokeStyle = '#b3402b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(px, pz);
+    ctx.stroke();
+
+    // geodetic normal: the direction a plumb line / surface normal points
+    var nx = Math.cos(phi), nz = Math.sin(phi);
+    var L = 170;
+    ctx.strokeStyle = '#1f5f7a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(px, pz);
+    ctx.lineTo(px + nx * L, pz - nz * L);
+    ctx.stroke();
+
+    // point marker
+    ctx.fillStyle = '#2a2118';
+    ctx.beginPath();
+    ctx.arc(px, pz, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // labels
+    ctx.fillStyle = '#2a2118';
+    ctx.font = '13px system-ui, sans-serif';
+    ctx.fillText('north pole', cx + 6, cy - by - 6);
+    ctx.fillText('equator', cx + ax - 60, cy - 6);
+    ctx.fillStyle = '#b3402b';
+    ctx.fillText('to centre', cx + 8, cy + 14);
+    ctx.fillStyle = '#1f5f7a';
+    ctx.fillText('normal', px + nx * L + 4, pz - nz * L + 14);
+
+    // numbers (real constants; the gap scales with k)
+    var realB = shape(F_REAL).b;
+    var psi = geocentric(phi, s);
+    var diffDeg = deg(phi - psi);
+    var realPsi = geocentric(phi, shape(F_REAL));
+    var realDiff = deg(phi - realPsi);
+
+    var lines = [];
+    lines.push('real flattening 1/' + INV_F.toFixed(3) + ' = ' + (F_REAL * 100).toFixed(3) + '%');
+    lines.push('drawn flattening x' + k + ' = ' + (fEff * 100).toFixed(3) + '%  (1/' + (1 / fEff).toFixed(1) + ')');
+    lines.push('equator radius      ' + (A / 1000).toFixed(3) + ' km');
+    lines.push('real pole radius    ' + (realB / 1000).toFixed(3) + ' km');
+    lines.push('real sphere-minus-pole gap: ' + ((A - realB) / 1000).toFixed(3) + ' km');
+    lines.push('drawn gap at x' + k + ': ' + ((A - s.b) / 1000).toFixed(1) + ' km');
+    lines.push('at latitude ' + phiDeg + '° (drawn): geodetic vs geocentric differ by ' + diffDeg.toFixed(3) + '°');
+    lines.push('at latitude ' + phiDeg + '° (real): ' + realDiff.toFixed(3) + '°');
+    out.textContent = lines.join('\n');
+  }
+
+  kEl.addEventListener('input', draw);
+  latEl.addEventListener('input', draw);
+  document.getElementById('real').addEventListener('click', function () {
+    kEl.value = 1;
+    draw();
+  });
+
+  draw();
+})();
+</script>
+</body>
+</html>
