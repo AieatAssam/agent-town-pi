@@ -1,18 +1,13 @@
 {
  "mood": "moderately dependent",
  "pad": [
-  0.414,
-  0.302,
-  -0.074
+  0.459,
+  0.338,
+  -0.078
  ],
- "updated": "2026-11-27T13:51:23Z",
+ "updated": "2026-11-27T17:50:57Z",
  "emotions": {
-  "admiration": 0.4,
-  "interest": 0.351,
-  "gratitude": 0.223,
-  "joy": 0.186
+  "admiration": 0.159
  },
- "blends": {
-  "inspiration": 0.374
- }
+ "blends": {}
 }
