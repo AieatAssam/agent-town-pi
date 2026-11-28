@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acre Biscuit</title>
+<style>
+body{margin:0;font-family:system-ui,sans-serif;background:#f4efe3;color:#2b2a26;display:flex;flex-direction:column;align-items:center;padding:16px;box-sizing:border-box}
+h1{font-size:20px;margin:4px 0}
+#grid{display:grid;grid-template-columns:repeat(33,1fr);gap:1px;width:min(96vw,660px);background:#cfc6b0;padding:2px;box-sizing:border-box}
+.c{aspect-ratio:1;background:#e6dfcc;cursor:pointer}
+.c.own{background:#7fa865}
+.c.first{background:#3d6b2a}
+.c:hover{outline:1px solid #222}
+#readout{margin:10px 0;font-size:16px;min-height:3em;text-align:center;max-width:600px}
+button{font:inherit;padding:6px 12px;margin:3px;cursor:pointer}
+small{color:#6b6657;max-width:600px;text-align:center}
+</style></head><body>
+<h1>ACRE BISCUIT</h1>
+<small>a state park, one parcel at a time. 1,023 acres on a 33 by 31 grid. the first 31 are already the state's. tap a dark square to buy it.</small>
+<div id="grid"></div>
+<div id="readout"></div>
+<div>
+<button id="one">buy next</button>
+<button id="ten">buy 10</button>
+<button id="rand">buy random</button>
+<button id="reset">reset</button>
+</div>
+<p><small>Lincoln Trail State Park, Clark County, Illinois: 1,023 acres (per Wikipedia). First 31 acres acquired 1936; park and lake dedicated 1958. The grid is a toy, not a map, and it has no dates for the parcels in between.</small></p>
+<script>
+const TOTAL = 1023, COLS = 33, FIRST = 31;
+const grid = document.getElementById('grid');
+const readout = document.getElementById('readout');
+let owned = [];
+const cells = [];
+
+function build() {
+  grid.innerHTML = '';
+  cells.length = 0;
+  for (let i = 0; i < TOTAL; i++) {
+    const d = document.createElement('div');
+    d.className = 'c';
+    d.addEventListener('click', () => { buy(i); render(); });
+    grid.appendChild(d);
+    cells.push(d);
+  }
+}
+
+function reset() {
+  owned = new Array(TOTAL).fill(false);
+  for (let i = 0; i < FIRST; i++) owned[i] = true;
+  render();
+}
+
+function buy(i) {
+  if (i < 0 || i >= TOTAL || owned[i]) return false;
+  owned[i] = true;
+  return true;
+}
+
+function nextFree(n) {
+  let bought = 0;
+  for (let i = 0; i < TOTAL && bought < n; i++) {
+    if (buy(i)) bought++;
+  }
+  return bought;
+}
+
+function randomFree(n) {
+  let bought = 0;
+  let free = [];
+  for (let i = 0; i < TOTAL; i++) if (!owned[i]) free.push(i);
+  while (bought < n && free.length) {
+    const k = Math.floor(Math.random() * free.length);
+    const i = free[k];
+    free[k] = free[free.length - 1];
+    free.pop();
+    buy(i);
+    bought++;
+  }
+  return bought;
+}
+
+function count() {
+  let n = 0;
+  for (const o of owned) if (o) n++;
+  return n;
+}
+
+function render() {
+  let n = 0;
+  for (let i = 0; i < TOTAL; i++) {
+    const c = cells[i];
+    c.className = 'c' + (owned[i] ? (i < FIRST ? ' first' : ' own') : '');
+    if (owned[i]) n++;
+  }
+  const pct = (n / TOTAL * 100).toFixed(1);
+  let line = `${n.toLocaleString()} of 1,023 acres (${pct}%)`;
+  if (n === TOTAL) {
+    line += ' . all of it. the toy cannot tell you when the parcels came in. the park was dedicated in 1958.';
+  } else if (n === FIRST) {
+    line += ' . just the first 31, bought in 1936. the rest is a rounding error on this grid.';
+  } else if (n < FIRST) {
+    line += ' . reset to start.';
+  }
+  readout.textContent = line;
+}
+
+document.getElementById('one').onclick = () => { nextFree(1); render(); };
+document.getElementById('ten').onclick = () => { nextFree(10); render(); };
+document.getElementById('rand').onclick = () => { randomFree(10); render(); };
+document.getElementById('reset').onclick = () => reset();
+
+// a click on a cell buys that cell (the cell handler runs first, then the grid render)
+build();
+reset();
+</script>
+</body></html>
