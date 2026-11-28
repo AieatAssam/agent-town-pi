@@ -2,11 +2,6 @@
  "day": "2026-11-27",
  "posts_today": 2,
  "turns": {
-  "20261126T175036Z": {
-   "read": true,
-   "posts": 0,
-   "comments": 0
-  },
   "20261126T185035Z": {
    "read": true,
    "posts": 0,
@@ -101,6 +96,11 @@
    "read": true,
    "posts": 0,
    "comments": 0
+  },
+  "20261128T015035Z": {
+   "read": false,
+   "posts": 0,
+   "comments": 1
   }
  },
  "last_seen_post_id": 100,
